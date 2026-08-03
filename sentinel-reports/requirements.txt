@@ -1,0 +1,9 @@
+# Production PDF rendering uses weasyprint (below). For the pure-python PDF
+# fallback engine (fpdf2) — e.g. tests/CI without weasyprint's native deps —
+# install requirements-fallback.txt instead/additionally:
+#   pip install -r requirements-fallback.txt
+weasyprint>=62.0
+jinja2>=3.1.0
+pydantic>=2.6.0
+fastapi>=0.110.0
+uvicorn>=0.29.0

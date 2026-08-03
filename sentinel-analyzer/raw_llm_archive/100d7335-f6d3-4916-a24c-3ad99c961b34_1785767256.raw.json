@@ -1,0 +1,18 @@
+{
+  "scan_id": "100d7335-f6d3-4916-a24c-3ad99c961b34",
+  "model": "llama3.1:8b",
+  "options": {
+    "num_ctx": 8192,
+    "num_gpu": 1,
+    "num_thread": 4,
+    "temperature": 0.1,
+    "top_p": 0.9,
+    "top_k": 40,
+    "num_predict": 2048,
+    "seed": 0
+  },
+  "raw_text": "{\n    \"reasoning\": \"Based on the provided vulnerability scan data, potential attack vectors have been identified.\",\n    \"attack_chains\": [\n        {\n            \"path\": [\"192.168.1.1:80\"],\n            \"description\": \"Unauthenticated access to HTTP service\",\n            \"mitre_technique\": \"T1568 - Dynamic Client-Side Code Loading\",\n            \"confidence\": 0.5,\n            \"impact\": 0.7,\n            \"priority\": 1\n        },\n        {\n            \"path\": [\"192.168.1.9:80\"],\n            \"description\": \"Unauthenticated access to Nginx service\",\n            \"mitre_technique\": \"T1568 - Dynamic Client-Side Code Loading\",\n            \"confidence\": 0.5,\n            \"impact\": 0.7,\n            \"priority\": 1\n        },\n        {\n            \"path\": [\"192.168.1.102:631\"],\n            \"description\": \"Unauthenticated access to CUPS service\",\n            \"mitre_technique\": \"T1568 - Dynamic Client-Side Code Loading\",\n            \"confidence\": 0.5,\n            \"impact\": 0.7,\n            \"priority\": 1\n        },\n        {\n            \"path\": [\"192.168.1.253:80\"],\n            \"description\": \"Unauthenticated access to HTTP service\",\n            \"mitre_technique\": \"T1568 - Dynamic Client-Side Code Loading\",\n            \"confidence\": 0.5,\n            \"impact\": 0.7,\n            \"priority\": 1\n        }\n    ],\n    \"remediation\": {\n        \"daily\": [\"Implement authentication and authorization mechanisms for HTTP services\"],\n        \"authority\": [\"Enforce strict access controls for Nginx service\"],\n        \"hacker\": [\"Exploit unauthenticated access to CUPS service\"],\n        \"military\": [\"Implement secure communication protocols for HTTP services\"]\n    },\n    \"risk_score\": 5.0,\n    \"observations\": [\"Potential attack vectors identified; remediation actions recommended.\"],\n    \"analyzer_mode\": \"llm\"\n}",
+  "ok": true,
+  "error": null,
+  "ts": 1785767256
+}

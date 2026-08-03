@@ -1,0 +1,18 @@
+{
+  "scan_id": "100d7335-f6d3-4916-a24c-3ad99c961b34",
+  "model": "llama3.1:8b",
+  "options": {
+    "num_ctx": 8192,
+    "num_gpu": 1,
+    "num_thread": 4,
+    "temperature": 0.1,
+    "top_p": 0.9,
+    "top_k": 40,
+    "num_predict": 2048,
+    "seed": 0
+  },
+  "raw_text": "{\n  \"reasoning\": \"Based on the provided vulnerability scan data, no explicit vulnerabilities were identified. However, potential attack vectors can be inferred from open ports and services.\",\n  \"attack_chains\": [\n    {\n      \"path\": [\"192.168.1.1:80\"],\n      \"description\": \"Potential web server exploitation via HTTP\",\n      \"mitre_technique\": \"T1055: Web Server Scanning\",\n      \"confidence\": 0.7,\n      \"impact\": 0.8,\n      \"priority\": 3\n    },\n    {\n      \"path\": [\"192.168.1.9:80\"],\n      \"description\": \"Potential web server exploitation via HTTP (nginx)\",\n      \"mitre_technique\": \"T1055: Web Server Scanning\",\n      \"confidence\": 0.7,\n      \"impact\": 0.8,\n      \"priority\": 3\n    },\n    {\n      \"path\": [\"192.168.1.102:631\"],\n      \"description\": \"Potential CUPS exploitation via HTTP\",\n      \"mitre_technique\": \"T1055: Web Server Scanning\",\n      \"confidence\": 0.6,\n      \"impact\": 0.7,\n      \"priority\": 2\n    },\n    {\n      \"path\": [\"192.168.1.253:80\"],\n      \"description\": \"Potential web server exploitation via HTTP\",\n      \"mitre_technique\": \"T1055: Web Server Scanning\",\n      \"confidence\": 0.7,\n      \"impact\": 0.8,\n      \"priority\": 3\n    }\n  ],\n  \"remediation\": {\n    \"daily\": [\"Implement web application firewall (WAF) rules to block suspicious traffic\"],\n    \"authority\": [\"Conduct regular security audits and penetration testing on exposed services\"],\n    \"hacker\": [\"Exploit open ports and services using tools like Nmap, Metasploit\"],\n    \"military\": [\"Classify and label sensitive data stored on the network\"]\n  },\n  \"risk_score\": 6.0,\n  \"observations\": [\n    \"Multiple hosts have open HTTP ports (80) with potential for exploitation\",\n    \"One host has an open CUPS port (631) with potential for exploitation\"\n  ],\n  \"analyzer_mode\": \"llm\"",
+  "ok": false,
+  "error": "LLM response is not valid JSON: Expecting ',' delimiter: line 48 column 25 (char 1765)",
+  "ts": 1785767215
+}

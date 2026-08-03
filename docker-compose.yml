@@ -1,0 +1,103 @@
+# SENTINEL — Docker Compose (Compose Specification / v2 CLI, no obsolete `version:` key)
+#
+# Services:
+#   analyzer  FastAPI analysis API on :8710 (LLM via Ollama, deterministic fallback otherwise)
+#   reports   FastAPI report renderer on :8711 (PDF / JSON / SARIF)
+#   ollama    LLM sidecar on :11434        -> opt-in via profile:  docker compose --profile llm up -d
+#   scanner   convenience shell only       -> opt-in via profile:  docker compose --profile cli run --rm scanner ...
+#
+# The scanner performs raw network I/O and is normally run directly on the host
+# (see README.md). The containerized variant below builds and runs it from a
+# mounted checkout for convenience on Linux hosts; on Docker Desktop (macOS)
+# prefer the host-built binary against the containerized analyzer, e.g.:
+#   ./sentinel-scanner/target/release/sentinel-scanner \
+#       --target 192.168.1.0/24 --tier hacker --analyzer-url http://localhost:8710
+
+services:
+  analyzer:
+    build: ./sentinel-analyzer
+    image: sentinel-analyzer:latest
+    ports:
+      - "8710:8710"
+    environment:
+      # Resolved over the compose network when the llm profile is enabled;
+      # unreachable otherwise, which triggers the analyzer's automatic fallback mode.
+      OLLAMA_URL: http://ollama:11434
+      REPORTS_URL: http://reports:8711
+    depends_on:
+      reports:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+        required: false # only present when the `llm` profile is active
+    healthcheck:
+      # curl is primary (component Dockerfiles install it); the python urllib
+      # fallback keeps the check working on minimal python:*-slim images.
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:8710/health || python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8710/health',timeout=3)\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    restart: unless-stopped
+
+  reports:
+    build: ./sentinel-reports
+    image: sentinel-reports:latest
+    ports:
+      - "8711:8711"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:8711/health || python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8711/health',timeout=3)\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    restart: unless-stopped
+
+  ollama:
+    # Pinned backend version (R5: score calibration is only reproducible
+    # against a pinned Ollama; never use `latest`). Bump deliberately.
+    image: ollama/ollama:0.32.5
+    profiles: ["llm"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+    # Pull the model once after first start:
+    #   docker compose --profile llm exec ollama ollama pull llama3.1:8b
+
+  scanner:
+    # Convenience runner only — for real assessments run the release binary on
+    # the host (needs raw-socket access and sees the real network). Builds from
+    # the mounted checkout on first use.
+    image: rust:1-slim
+    profiles: ["cli"]
+    network_mode: host # Linux: shares the host network namespace for scanning
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    working_dir: /workspace/sentinel-scanner
+    volumes:
+      - ".:/workspace"
+    entrypoint: ["cargo", "run", "--release", "--"]
+    command: ["--help"]
+    # Example:
+    #   docker compose --profile cli run --rm scanner \
+    #     --target 192.168.1.0/24 --tier hacker --output /workspace/scan.json
+
+volumes:
+  ollama_data:

@@ -1,0 +1,170 @@
+name: sentinel-scan
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: rust (scanner)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sentinel-scanner
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: cargo cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            sentinel-scanner/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('sentinel-scanner/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+      - run: cargo build --release
+
+  go:
+    name: go (cli)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sentinel-cli
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: sentinel-cli/go.sum
+      - run: go build ./...
+      - name: cross-compile darwin/arm64
+        run: GOOS=darwin GOARCH=arm64 go build -o /tmp/sentinel-cli-darwin-arm64 .
+      - run: go vet ./...
+      - name: gofmt check
+        run: test -z "$(gofmt -l .)"
+      - run: go test ./...
+
+  python:
+    name: python (analyzer + reports)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: install toolchain + component deps
+        run: |
+          pip install -r requirements-test.txt
+          pip install -r sentinel-analyzer/requirements.txt
+          pip install -r sentinel-reports/requirements.txt
+          # fpdf2 powers the pure-python PDF fallback engine exercised by
+          # sentinel-reports/tests/unit/test_pdf_fallback.py
+          pip install -r sentinel-reports/requirements-fallback.txt
+          pip install -r sentinel-ui/requirements.txt
+      - run: ruff check sentinel-analyzer sentinel-reports sentinel-ui test
+      - name: unit tests
+        run: python -m pytest sentinel-analyzer sentinel-reports test/unit -q
+      - name: ui tests (offscreen Qt)
+        run: QT_QPA_PLATFORM=offscreen python -m pytest sentinel-ui/tests -q
+
+  integration:
+    name: integration (analyzer + reports)
+    runs-on: ubuntu-latest
+    needs: [rust, go, python]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: cargo cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            sentinel-scanner/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('sentinel-scanner/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+      - name: build scanner (feeds the pipeline test)
+        run: cargo build --release
+        working-directory: sentinel-scanner
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: install python deps
+        run: |
+          pip install -r requirements-test.txt
+          pip install -r sentinel-analyzer/requirements.txt
+          # fpdf2 for the reports pure-python PDF fallback engine
+          pip install -r sentinel-reports/requirements-fallback.txt
+      - name: start services (no llm profile -> deterministic fallback)
+        run: docker compose up -d --build analyzer reports
+      - name: pipeline test (scanner -> /analyze)
+        run: python test/integration/test_pipeline.py
+      - name: API contract tests
+        run: python -m pytest test/integration/test_api.py -v
+      - name: service logs on failure
+        if: failure()
+        run: docker compose logs analyzer reports
+      - name: tear down
+        if: always()
+        run: docker compose down
+
+  e2e:
+    name: e2e (cli scan of 127.0.0.1/32)
+    runs-on: ubuntu-latest
+    needs: [rust, go, python]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: cargo cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            sentinel-scanner/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('sentinel-scanner/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+      - name: build scanner
+        run: cargo build --release
+        working-directory: sentinel-scanner
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: sentinel-cli/go.sum
+      - name: build cli to repo root
+        run: go build -o "$GITHUB_WORKSPACE/sentinel-cli" .
+        working-directory: sentinel-cli
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: install python deps
+        run: |
+          pip install -r requirements-test.txt
+          pip install -r sentinel-analyzer/requirements.txt
+      - name: start services
+        run: docker compose up -d --build analyzer reports
+      - name: cli scan (loopback, scope gate bypassed for CI)
+        run: ./sentinel-cli scan --target 127.0.0.1/32 --tier daily --output json --yes
+      - name: validate scan.json + analysis.json
+        run: python test/e2e/validate_output.py
+      - name: validate sentinel-report.json
+        run: python test/e2e/validate_report.py
+      - name: service logs on failure
+        if: failure()
+        run: docker compose logs analyzer reports
+      - name: tear down
+        if: always()
+        run: docker compose down

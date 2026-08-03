@@ -1,0 +1,9 @@
+# Test-only dependencies for all Python test suites (unit + integration + e2e).
+# Install alongside component requirements: pip install -r requirements-test.txt
+pytest>=8.0
+pytest-asyncio>=0.23
+httpx>=0.27
+respx>=0.21
+jsonschema>=4.21
+pyyaml>=6.0
+ruff>=0.4

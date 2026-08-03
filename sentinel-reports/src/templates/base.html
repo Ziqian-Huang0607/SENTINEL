@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{% block title %}SENTINEL — Vulnerability Assessment Report{% endblock %}</title>
+<style>
+:root {
+  --steel-950: #0B0F14;
+  --steel-900: #121821;
+  --steel-800: #1B2430;
+  --steel-700: #232E3C;
+  --steel-600: #2E3A48;
+  --steel-400: #5B6B7C;
+  --steel-200: #C9D4DF;
+  --accent: #38BDF8;
+  --accent-dark: #0C7FB8;
+  --ink: #1A222C;
+  --muted: #5B6B7C;
+  --paper: #FFFFFF;
+  --panel: #F2F5F8;
+  --critical: #DC2626;
+  --high: #EA580C;
+  --medium: #CA8A04;
+  --low: #16A34A;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { hyphens: auto; }
+body {
+  font-family: "DejaVu Sans", "Helvetica", "Arial", sans-serif;
+  font-size: 9.5pt;
+  color: var(--ink);
+  line-height: 1.45;
+}
+@page {
+  size: A4;
+  margin: 20mm 16mm 18mm 16mm;
+  @bottom-left {
+    content: "SENTINEL — Vulnerability Assessment Report";
+    font-family: "DejaVu Sans", sans-serif;
+    font-size: 7.5pt;
+    color: #5B6B7C;
+  }
+  @bottom-right {
+    content: "Page " counter(page) " of " counter(pages);
+    font-family: "DejaVu Sans", sans-serif;
+    font-size: 7.5pt;
+    color: #5B6B7C;
+  }
+}
+@page cover {
+  margin: 0;
+  @bottom-left { content: none; }
+  @bottom-right { content: none; }
+}
+
+/* ---------- cover ---------- */
+.cover {
+  page: cover;
+  width: 210mm;
+  height: 296mm;
+  background: linear-gradient(160deg, #0B0F14 0%, #121821 45%, #1B2430 100%);
+  color: #E6EDF3;
+  page-break-after: always;
+  position: relative;
+}
+.cover-inner { padding: 30mm 22mm 0 22mm; }
+.cover-logo { width: 46mm; height: 46mm; }
+.cover-brand {
+  margin-top: 8mm;
+  font-size: 34pt;
+  font-weight: bold;
+  letter-spacing: 6pt;
+  color: #FFFFFF;
+}
+.cover-brand span { color: var(--accent); }
+.cover-subtitle {
+  margin-top: 2mm;
+  font-size: 12pt;
+  letter-spacing: 2.5pt;
+  text-transform: uppercase;
+  color: #9FB3C8;
+}
+.cover-rule {
+  margin: 12mm 0;
+  border: none;
+  border-top: 0.6mm solid var(--accent);
+  width: 42mm;
+}
+.cover-meta { width: 100%; border-collapse: collapse; margin-top: 4mm; }
+.cover-meta td {
+  padding: 2.4mm 0;
+  font-size: 10.5pt;
+  border-bottom: 0.2mm solid #2E3A48;
+  vertical-align: top;
+}
+.cover-meta td.k { color: #9FB3C8; text-transform: uppercase; letter-spacing: 1.2pt; font-size: 8pt; width: 42mm; padding-top: 3mm; }
+.cover-meta td.v { color: #E6EDF3; font-weight: bold; }
+.cover-classification {
+  position: absolute;
+  bottom: 18mm;
+  left: 22mm;
+  right: 22mm;
+  font-size: 8pt;
+  letter-spacing: 1.5pt;
+  text-transform: uppercase;
+  color: #5B6B7C;
+  border-top: 0.2mm solid #2E3A48;
+  padding-top: 4mm;
+}
+
+/* ---------- content ---------- */
+h1.section {
+  font-size: 15pt;
+  color: var(--steel-900);
+  letter-spacing: 0.5pt;
+  text-transform: uppercase;
+  border-bottom: 0.7mm solid var(--accent);
+  padding-bottom: 1.6mm;
+  margin: 7mm 0 4mm 0;
+}
+h1.section:first-of-type { margin-top: 0; }
+h2.sub {
+  font-size: 11pt;
+  color: var(--steel-800);
+  margin: 5mm 0 2mm 0;
+}
+p { margin: 0 0 2.5mm 0; }
+.page-break { page-break-before: always; }
+
+.exec-band {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 3mm 0 5mm 0;
+}
+.exec-band td { vertical-align: middle; }
+.score-box {
+  width: 52mm;
+  background: var(--steel-900);
+  color: #FFFFFF;
+  text-align: center;
+  padding: 6mm 4mm;
+  border-radius: 2mm;
+}
+.score-box .score { font-size: 26pt; font-weight: bold; color: var(--accent); }
+.score-box .label { font-size: 8pt; letter-spacing: 1.5pt; text-transform: uppercase; color: #9FB3C8; margin-top: 1mm; }
+.score-box .band { font-size: 10pt; font-weight: bold; margin-top: 1.5mm; }
+.exec-notes { padding-left: 6mm; font-size: 9.5pt; color: var(--ink); }
+.exec-notes ul { margin-left: 4mm; }
+.exec-notes li { margin-bottom: 1.4mm; }
+
+table.data {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 2mm 0 4mm 0;
+  font-size: 8.5pt;
+}
+table.data th {
+  background: var(--steel-800);
+  color: #FFFFFF;
+  text-align: left;
+  padding: 2mm 2.4mm;
+  font-size: 8pt;
+  text-transform: uppercase;
+  letter-spacing: 0.6pt;
+}
+table.data td {
+  padding: 1.8mm 2.4mm;
+  border-bottom: 0.2mm solid #D8E0E8;
+  vertical-align: top;
+}
+table.data tbody tr:nth-child(even) td { background: var(--panel); }
+table.data tr { break-inside: avoid; page-break-inside: avoid; }
+table.data thead { display: table-header-group; }
+.mono { font-family: "DejaVu Sans Mono", "Courier New", monospace; }
+
+.badge {
+  display: inline-block;
+  padding: 0.6mm 2.4mm;
+  border-radius: 1.2mm;
+  color: #FFFFFF;
+  font-size: 8pt;
+  font-weight: bold;
+}
+.badge.critical { background: var(--critical); }
+.badge.high { background: var(--high); }
+.badge.medium { background: var(--medium); }
+.badge.low { background: var(--low); }
+.badge.tier { background: var(--accent-dark); }
+
+.chain {
+  border: 0.3mm solid var(--steel-600);
+  border-left: 1.2mm solid var(--accent);
+  border-radius: 1mm;
+  padding: 2.6mm 3.4mm;
+  margin-bottom: 3mm;
+  page-break-inside: avoid;
+}
+.chain-head { font-weight: bold; color: var(--steel-900); margin-bottom: 1.2mm; }
+.chain-path { font-family: "DejaVu Sans Mono", monospace; font-size: 8.5pt; color: var(--accent-dark); margin-bottom: 1.4mm; }
+.chain-meta { font-size: 8.5pt; color: var(--muted); margin-bottom: 1.4mm; }
+.chain-desc { font-size: 9pt; }
+
+.tier-block {
+  margin-bottom: 4mm;
+  page-break-inside: avoid;
+}
+.tier-head {
+  background: var(--steel-800);
+  color: #FFFFFF;
+  padding: 2mm 3mm;
+  border-radius: 1mm 1mm 0 0;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 1pt;
+  font-size: 9.5pt;
+}
+.tier-head .tier-tag { color: var(--accent); }
+.tier-meta {
+  background: var(--panel);
+  border: 0.2mm solid #D8E0E8;
+  border-top: none;
+  padding: 1.8mm 3mm;
+  font-size: 8pt;
+  color: var(--muted);
+}
+.tier-body {
+  border: 0.2mm solid #D8E0E8;
+  border-top: none;
+  border-radius: 0 0 1mm 1mm;
+  padding: 2.4mm 3mm;
+}
+.tier-body ul { margin-left: 4.5mm; }
+.tier-body li { margin-bottom: 1.2mm; font-size: 9pt; }
+.empty-note { color: var(--muted); font-style: italic; font-size: 9pt; }
+</style>
+</head>
+<body>
+{% block content %}{% endblock %}
+</body>
+</html>

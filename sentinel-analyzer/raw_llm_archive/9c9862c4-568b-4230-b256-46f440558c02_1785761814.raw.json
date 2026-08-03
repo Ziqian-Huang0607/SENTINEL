@@ -1,0 +1,18 @@
+{
+  "scan_id": "9c9862c4-568b-4230-b256-46f440558c02",
+  "model": "llama3.1:8b",
+  "options": {
+    "num_ctx": 8192,
+    "num_gpu": 1,
+    "num_thread": 4,
+    "temperature": 0.1,
+    "top_p": 0.9,
+    "top_k": 40,
+    "num_predict": 2048,
+    "seed": 0
+  },
+  "raw_text": "{\n  \"reasoning\": \"No vulnerabilities found in the scan data.\",\n  \"attack_chains\": [],\n  \"remediation\": {\n    \"daily\": [\"Perform daily vulnerability scans to identify potential issues.\"],\n    \"authority\": [\"Consult with security experts for guidance on remediation.\"],\n    \"hacker\": [\"Exploit known vulnerabilities to gain unauthorized access.\"],\n    \"military\": [\"Implement robust security measures to prevent exploitation.\"]\n  },\n  \"risk_score\": 0.0,\n  \"observations\": [],\n  \"analyzer_mode\": \"llm\",\n  \"priority\": 1\n}",
+  "ok": true,
+  "error": null,
+  "ts": 1785761814
+}

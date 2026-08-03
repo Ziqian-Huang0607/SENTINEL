@@ -1,0 +1,18 @@
+{
+  "scan_id": "3f6c8b4e-2c1a-4e5b-9a7d-0f1e2d3c4b5a",
+  "model": "llama3.1:8b",
+  "options": {
+    "num_ctx": 8192,
+    "num_gpu": 1,
+    "num_thread": 4,
+    "temperature": 0.1,
+    "top_p": 0.9,
+    "top_k": 40,
+    "num_predict": 2048,
+    "seed": 0
+  },
+  "raw_text": "{\n  \"reasoning\": [\n    \"The scan data indicates that there are two Redis instances exposed to the internet and internal networks.\",\n    \"One instance is on db01 (192.0.2.45) with version 6.2.7 and the other on ws07 (192.0.2.46) with unknown version.\",\n    \"Both instances have CVE-2024-21667, a high-severity vulnerability allowing unauthenticated remote code execution.\"\n  ],\n  \"attack_chains\": [\n    {\n      \"path\": [\"192.0.2.45:6379\"],\n      \"description\": \"Unauthenticated Redis on db01 (192.0.2.45:6379) allows any unauthenticated client to read, modify or delete stored data.\",\n      \"mitre_technique\": \"T1190\",\n      \"confidence\": 0.9,\n      \"impact\": 1.0,\n      \"priority\": 1\n    },\n    {\n      \"path\": [\"192.0.2.46:6379\"],\n      \"description\": \"Unauthenticated Redis on ws07 (192.0.2.46:6379) allows any unauthenticated client to read, modify or delete stored data.\",\n      \"mitre_technique\": \"T1190\",\n      \"confidence\": 0.71,\n      \"impact\": 0.81,\n      \"priority\": 1\n    },\n    {\n      \"path\": [\"192.0.2.45:6379\", \"192.0.2.45:22\"],\n      \"description\": \"Pivot from unauthenticated Redis on 192.0.2.45:6379 to SSH (22) on db01 (192.0.2.45) to stage tooling and move laterally through the environment.\",\n      \"mitre_technique\": \"T1021.004\",\n      \"confidence\": 0.75,\n      \"impact\": 1.0,\n      \"priority\": 1\n    }\n  ],\n  \"remediation\": {\n    \"daily\": [\"Update Redis instances to a patched version\"],\n    \"authority\": [\"Implement network segmentation and access controls\"],\n    \"hacker\": [\"Exploit CVE-2024-21667 for unauthenticated remote code execution\"],\n    \"military\": [\"Conduct thorough risk assessment and implement countermeasures\"]\n  },\n  \"risk_score\": 7.92,\n  \"observations\": [\n    \"Both Redis instances are exposed to the internet, increasing the attack surface.\",\n    \"CVE-2024-21667 is a high-severity vulnerability allowing unauthenticated remote code execution.\"\n  ],\n  \"analyzer_mode\": \"llm\"\n}",
+  "ok": true,
+  "error": null,
+  "ts": 1785760771
+}

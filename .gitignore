@@ -1,0 +1,31 @@
+# Rust
+target/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node-ish (editor/tooling ecosystems)
+node_modules/
+dist/
+
+# Databases — but the scanner ships a seeded CVE cache that must be committed
+*.db
+!sentinel-scanner/**/cve_cache.db
+
+# SENTINEL run artifacts
+scan.json
+analysis.json
+sentinel-report.*
+
+# Operator binary produced by `make build`
+bin/
+# Local go build output (plain `go build` in sentinel-cli/)
+sentinel-cli/sentinel-cli
+
+# OS
+.DS_Store

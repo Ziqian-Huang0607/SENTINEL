@@ -1,0 +1,18 @@
+{
+  "scan_id": "3f6c8b4e-2c1a-4e5b-9a7d-0f1e2d3c4b5a",
+  "model": "llama3.1:8b",
+  "options": {
+    "num_ctx": 8192,
+    "num_gpu": 1,
+    "num_thread": 4,
+    "temperature": 0.1,
+    "top_p": 0.9,
+    "top_k": 40,
+    "num_predict": 2048,
+    "seed": 0
+  },
+  "raw_text": "{\n  \"reasoning\": [\n    \"The vulnerability scan reveals two hosts with open Redis ports: db01 (192.0.2.45) and ws07 (192.0.2.46).\",\n    \"CVE-2024-21667 is identified as a high-risk vulnerability on both hosts, allowing unauthenticated remote code execution.\",\n    \"The 'unauth_service' rule indicates that the Redis service on db01 allows any unauthenticated client to read, modify or delete stored data.\"\n  ],\n  \"attack_chains\": [\n    {\n      \"path\": [\"192.0.2.45:6379\"],\n      \"description\": \"Unauthenticated Redis on db01 (192.0.2.45:6379) allows any unauthenticated client to read, modify or delete stored data.\",\n      \"mitre_technique\": \"T1190\",\n      \"confidence\": 0.9,\n      \"impact\": 1.0,\n      \"priority\": 1\n    },\n    {\n      \"path\": [\"192.0.2.46:6379\"],\n      \"description\": \"Unauthenticated Redis on ws07 (192.0.2.46:6379) allows any unauthenticated client to read, modify or delete stored data.\",\n      \"mitre_technique\": \"T1190\",\n      \"confidence\": 0.71,\n      \"impact\": 0.81,\n      \"priority\": 1\n    }\n  ],\n  \"remediation\": {\n    \"daily\": [\"Patch Redis instances on db01 and ws07 to prevent unauthenticated remote code execution\"],\n    \"authority\": [\"Implement authentication mechanisms for Redis services on both hosts\"],\n    \"hacker\": [\"Exploit CVE-2024-21667 on both hosts to gain unauthorized access\"],\n    \"military\": [\"Classify Redis services as high-risk assets and implement additional security measures\"]\n  },\n  \"risk_score\": 7.92,\n  \"observations\": [\n    \"The vulnerability scan was performed on a daily schedule.\",\n    \"Both hosts are reachable from the internet, increasing the risk of exploitation.\"\n  ],\n  \"analyzer_mode\": \"llm\"\n}",
+  "ok": true,
+  "error": null,
+  "ts": 1785761703
+}

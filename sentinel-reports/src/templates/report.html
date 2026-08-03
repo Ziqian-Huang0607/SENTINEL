@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}SENTINEL Report — {{ scan.scan_id }}{% endblock %}
+{% block content %}
+<div class="cover">
+  <div class="cover-inner">
+    <img class="cover-logo" src="assets/logo-embed.png" alt="SENTINEL logo">
+    <div class="cover-brand">SENTINEL<span>.</span></div>
+    <div class="cover-subtitle">Vulnerability Assessment Report</div>
+    <hr class="cover-rule">
+    <table class="cover-meta">
+      <tr><td class="k">Scan ID</td><td class="v mono">{{ scan.scan_id }}</td></tr>
+      <tr><td class="k">Target</td><td class="v mono">{{ scan.target }}</td></tr>
+      <tr><td class="k">Security Tier</td><td class="v">{{ scan.tier | upper }}</td></tr>
+      <tr><td class="k">Scan Window</td><td class="v">{{ fmt_dt(scan.started_at) }} — {{ fmt_dt(scan.finished_at) }}</td></tr>
+      <tr><td class="k">Report Date</td><td class="v">{{ generated_at }}</td></tr>
+      <tr><td class="k">Analysis Mode</td><td class="v">{{ analysis.analyzer_mode | upper }}</td></tr>
+    </table>
+    <div class="cover-classification">Sentinel security assessment — handle according to the {{ scan.tier }} tier policy</div>
+  </div>
+</div>
+
+<h1 class="section">Executive Summary</h1>
+<table class="exec-band">
+  <tr>
+    <td class="score-box">
+      <div class="label">Overall Risk Score</div>
+      <div class="score">{{ "%.2f" | format(scan.risk_score) }}</div>
+      <div class="band" style="color: {{ risk_color(scan.risk_score) }};">{{ risk_label(scan.risk_score) | upper }} RISK</div>
+    </td>
+    <td class="exec-notes">
+      <p>
+        Assessment of <strong class="mono">{{ scan.target }}</strong> at the
+        <strong>{{ scan.tier }}</strong> tier identified
+        <strong>{{ scan.vulnerabilities | length }} vulnerabilities</strong> across
+        <strong>{{ scan.hosts | length }} hosts</strong>.
+        {% if analysis.attack_chains | length > 0 %}
+        The analyzer derived <strong>{{ analysis.attack_chains | length }} attack chain(s)</strong>
+        from the observed exposure.
+        {% endif %}
+      </p>
+      {% if analysis.observations %}
+      <ul>
+        {% for obs in analysis.observations %}
+        <li>{{ obs }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </td>
+  </tr>
+</table>
+
+<h1 class="section">Scope Summary</h1>
+<table class="data">
+  <tr><th style="width: 34mm;">Attribute</th><th>Value</th></tr>
+  <tr><td>Target scope</td><td class="mono">{{ scan.target }}</td></tr>
+  <tr><td>Security tier</td><td><span class="badge tier">{{ scan.tier | upper }}</span></td></tr>
+  <tr><td>Scan started</td><td>{{ fmt_dt(scan.started_at) }}</td></tr>
+  <tr><td>Scan finished</td><td>{{ fmt_dt(scan.finished_at) }}</td></tr>
+  <tr><td>Hosts discovered</td><td>{{ scan.hosts | length }}</td></tr>
+  <tr><td>Open ports observed</td><td>{{ open_port_count }}</td></tr>
+  <tr><td>Vulnerabilities matched</td><td>{{ scan.vulnerabilities | length }}</td></tr>
+  <tr><td>Scan risk score</td><td>{{ "%.2f" | format(scan.risk_score) }} / 10.00</td></tr>
+  <tr><td>Analysis risk score</td><td>{{ "%.2f" | format(analysis.risk_score) }} / 10.00</td></tr>
+</table>
+
+<h1 class="section">Hosts</h1>
+{% if scan.hosts %}
+<table class="data">
+  <thead>
+  <tr>
+    <th>IP Address</th><th>Hostname</th><th>OS Guess</th>
+    <th>Trust Zone</th><th>Criticality</th><th>Open Ports</th>
+  </tr>
+  </thead>
+  <tbody>
+  {% for host in scan.hosts %}
+  <tr>
+    <td class="mono">{{ host.ip }}</td>
+    <td>{{ host.hostname or "—" }}</td>
+    <td>{{ host.os_guess or "—" }}</td>
+    <td>{{ host.trust_zone }}</td>
+    <td>{{ host.criticality }}</td>
+    <td class="mono">
+      {%- set open_ports = host.ports | selectattr("state", "equalto", "open") | list -%}
+      {%- if open_ports -%}
+        {{ open_ports | map(attribute="port") | join(", ") }}
+      {%- else -%}
+        none
+      {%- endif -%}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty-note">No live hosts were discovered within the target scope.</p>
+{% endif %}
+
+<h1 class="section">Vulnerabilities</h1>
+{% if scan.vulnerabilities %}
+<table class="data">
+  <thead>
+  <tr>
+    <th style="width: 30mm;">CVE</th><th style="width: 14mm;">CVSS</th>
+    <th style="width: 14mm;">EPSS</th><th style="width: 34mm;">Endpoint</th><th>Summary</th>
+  </tr>
+  </thead>
+  <tbody>
+  {% for vuln in scan.vulnerabilities | sort(attribute="cvss", reverse=True) %}
+  <tr>
+    <td class="mono">{{ vuln.cve_id }}</td>
+    <td><span class="badge {{ cvss_class(vuln.cvss) }}">{{ "%.1f" | format(vuln.cvss) }}</span></td>
+    <td>{{ "%.2f" | format(vuln.epss) }}</td>
+    <td class="mono">{{ vuln.host }}:{{ vuln.port }}</td>
+    <td>{{ vuln.summary }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty-note">No known vulnerabilities were matched against the discovered services.</p>
+{% endif %}
+
+<h1 class="section">Attack Chains</h1>
+{% if analysis.attack_chains %}
+{% for chain in analysis.attack_chains | sort(attribute="priority") %}
+<div class="chain">
+  <div class="chain-head">Priority {{ chain.priority }} — MITRE ATT&amp;CK {{ chain.mitre_technique }}</div>
+  <div class="chain-path">{{ chain.path | join(" → ") }}</div>
+  <div class="chain-meta">Confidence {{ "%.0f" | format(chain.confidence * 100) }}% · Impact {{ "%.0f" | format(chain.impact * 100) }}%</div>
+  <div class="chain-desc">{{ chain.description }}</div>
+</div>
+{% endfor %}
+{% else %}
+<p class="empty-note">No multi-stage attack chains were derived from the scan evidence.</p>
+{% endif %}
+
+<h1 class="section">Tiered Remediation Plan</h1>
+{% for tier_name, tier_info in tiers %}
+<div class="tier-block">
+  <div class="tier-head"><span class="tier-tag">{{ tier_name | upper }}</span> TIER</div>
+  <div class="tier-meta">
+    Threat profile: {{ tier_info.threat }} · Compliance baseline: {{ tier_info.compliance }} · Critical patch SLA: {{ tier_info.sla }}
+  </div>
+  <div class="tier-body">
+    {% set actions = analysis.remediation | attr(tier_name) %}
+    {% if actions %}
+    <ul>
+      {% for action in actions %}
+      <li>{{ action }}</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-note">No additional controls required beyond the current posture.</p>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

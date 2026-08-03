@@ -1,0 +1,18 @@
+{
+  "scan_id": "da482af6-c560-4eb2-a3f4-9d4ee765d6cb",
+  "model": "llama3.1:8b",
+  "options": {
+    "num_ctx": 8192,
+    "num_gpu": 1,
+    "num_thread": 4,
+    "temperature": 0.1,
+    "top_p": 0.9,
+    "top_k": 40,
+    "num_predict": 2048,
+    "seed": 0
+  },
+  "raw_text": "{\n  \"reasoning\": \"No vulnerabilities found in the scan data.\",\n  \"attack_chains\": [],\n  \"remediation\": {\n    \"daily\": [\"Review and update vulnerability scanning configuration\"],\n    \"authority\": [\"Verify system configurations and patch levels\"],\n    \"hacker\": [\"Exploit unknown vulnerabilities if not patched\"],\n    \"military\": [\"Implement additional security measures for high-risk systems\"]\n  },\n  \"risk_score\": 0.0,\n  \"observations\": [],\n  \"analyzer_mode\": \"llm\"\n}",
+  "ok": true,
+  "error": null,
+  "ts": 1785761644
+}
