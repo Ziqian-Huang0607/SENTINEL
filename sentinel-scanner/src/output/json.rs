@@ -12,7 +12,11 @@
 //!                         "service": "redis", "version": "6.2.7",
 //!                         "banner": "-NOAUTH"}]}],
 //!   "vulnerabilities": [{"cve_id": "...", "cvss": 9.8, "epss": 0.85,
-//!                        "host": "...", "port": 6379, "summary": "..."}],
+//!                        "host": "...", "port": 6379, "summary": "...",
+//!                        "kev": false}],
+//!   "posture_findings": [{"id": "POSTURE-UNAUTH-WEB", "host": "...",
+//!                         "port": 8080, "severity": 6.5, "title": "...",
+//!                         "evidence": "GET / -> 200; Server: nginx"}],
 //!   "risk_score": 8.97
 //! }
 //! ```
@@ -160,10 +164,56 @@ pub struct ScanReport {
     pub finished_at: String,
     /// Live hosts with port/fingerprint detail.
     pub hosts: Vec<HostReport>,
+    /// Embedded CVE signature DB provenance (R8 coverage note): lets the
+    /// report state exactly what "no CVE matches" was checked against.
+    #[serde(default)]
+    pub cve_db: CveDbInfo,
     /// Matched vulnerability findings.
     pub vulnerabilities: Vec<VulnReport>,
+    /// Exposure findings without a CVE match (unauthenticated interfaces,
+    /// legacy cleartext services). Scored through the same deterministic
+    /// formula with EPSS = 0. Additive: absent/empty in pre-R8 scan files.
+    #[serde(default)]
+    pub posture_findings: Vec<PostureReport>,
     /// Deterministic risk score: max per-finding score, rounded to 2dp.
     pub risk_score: f64,
+}
+
+/// Provenance of the embedded CVE signature database (R8).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CveDbInfo {
+    /// Seed version string (cve_cache::SEED_VERSION).
+    pub version: String,
+    /// Number of seeded signatures.
+    pub signatures: usize,
+}
+
+impl Default for CveDbInfo {
+    fn default() -> Self {
+        Self {
+            version: crate::vuln::cve_cache::SEED_VERSION.to_string(),
+            signatures: 0,
+        }
+    }
+}
+
+/// One exposure finding that has no CVE identifier (R8). Unlike a
+/// [`VulnReport`] it carries its own pseudo-CVSS severity per class and is
+/// always scored with EPSS = 0.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PostureReport {
+    /// Stable finding-class identifier, e.g. `POSTURE-UNAUTH-WEB-GATEWAY`.
+    pub id: String,
+    /// Affected host IP.
+    pub host: String,
+    /// Affected port.
+    pub port: u16,
+    /// Pseudo-CVSS severity for the finding class (posture.rs constants).
+    pub severity: f64,
+    /// Human-readable finding title.
+    pub title: String,
+    /// Probe/banner evidence backing the finding.
+    pub evidence: String,
 }
 
 /// Serializes `report` as pretty JSON to `path`.
@@ -217,6 +267,18 @@ mod tests {
                 summary: "Redis Lua sandbox escape".to_string(),
                 kev: true,
             }],
+            posture_findings: vec![PostureReport {
+                id: "POSTURE-UNAUTH-WEB".to_string(),
+                host: "192.168.1.45".to_string(),
+                port: 8080,
+                severity: 6.5,
+                title: "Web interface reachable without authentication".to_string(),
+                evidence: "GET / -> 200; Server: nginx".to_string(),
+            }],
+            cve_db: CveDbInfo {
+                version: "2026.08.1".to_string(),
+                signatures: 30,
+            },
             risk_score: 6.05,
         }
     }
@@ -235,10 +297,14 @@ mod tests {
             "finished_at",
             "hosts",
             "vulnerabilities",
+            "posture_findings",
+            "cve_db",
             "risk_score",
         ] {
             assert!(value.get(key).is_some(), "missing key {key}");
         }
+        assert_eq!(value["cve_db"]["version"], "2026.08.1");
+        assert_eq!(value["cve_db"]["signatures"], 30);
         assert_eq!(value["tier"], "daily");
         let host = &value["hosts"][0];
         assert_eq!(host["trust_zone"], "internal");
@@ -259,6 +325,18 @@ mod tests {
         let text = to_json_string(&report).expect("serialize");
         let back: ScanReport = serde_json::from_str(&text).expect("deserialize");
         assert_eq!(report, back);
+    }
+
+    #[test]
+    fn pre_r8_scan_json_without_posture_still_parses() {
+        // Backward compatibility: scan files written before the R8 posture
+        // round have no posture_findings key and must stay valid input.
+        let text = to_json_string(&sample_report()).expect("serialize");
+        let mut value: serde_json::Value = serde_json::from_str(&text).unwrap();
+        value.as_object_mut().unwrap().remove("posture_findings");
+        let back: ScanReport =
+            serde_json::from_value(value).expect("deserialize without posture key");
+        assert!(back.posture_findings.is_empty());
     }
 
     #[test]

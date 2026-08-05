@@ -31,13 +31,22 @@
       <p>
         Assessment of <strong class="mono">{{ scan.target }}</strong> at the
         <strong>{{ scan.tier }}</strong> tier identified
-        <strong>{{ scan.vulnerabilities | length }} vulnerabilities</strong> across
+        <strong>{{ scan.vulnerabilities | length }} CVE finding(s)</strong>
+        {% if scan.posture_findings %}and
+        <strong>{{ scan.posture_findings | length }} exposure(s) without a CVE match</strong>
+        {% endif %}across
         <strong>{{ scan.hosts | length }} hosts</strong>.
         {% if analysis.attack_chains | length > 0 %}
         The analyzer derived <strong>{{ analysis.attack_chains | length }} attack chain(s)</strong>
         from the observed exposure.
         {% endif %}
       </p>
+      {% if scan.vulnerabilities | length == 0 and scan.posture_findings %}
+      <p>
+        <strong>Note:</strong> zero CVE matches is not zero risk — the
+        exposure findings below are scored into the headline risk above.
+      </p>
+      {% endif %}
       {% if analysis.observations %}
       <ul>
         {% for obs in analysis.observations %}
@@ -59,8 +68,18 @@
   <tr><td>Hosts discovered</td><td>{{ scan.hosts | length }}</td></tr>
   <tr><td>Open ports observed</td><td>{{ open_port_count }}</td></tr>
   <tr><td>Vulnerabilities matched</td><td>{{ scan.vulnerabilities | length }}</td></tr>
+  {% if scan.posture_findings %}
+  <tr><td>Exposures (no CVE match)</td><td>{{ scan.posture_findings | length }}</td></tr>
+  {% endif %}
   <tr><td>Scan risk score</td><td>{{ "%.2f" | format(scan.risk_score) }} / 10.00</td></tr>
   <tr><td>Analysis risk score</td><td>{{ "%.2f" | format(analysis.risk_score) }} / 10.00</td></tr>
+  {% if scan.cve_db and scan.cve_db.version %}
+  <tr>
+    <td>Detection coverage</td>
+    <td>CVE signature DB v{{ scan.cve_db.version }} ({{ scan.cve_db.signatures }} signatures);
+      EPSS v4 (30-day exploitation window); CISA KEV escalation floor 9.0</td>
+  </tr>
+  {% endif %}
 </table>
 
 <h1 class="section">Hosts</h1>
@@ -118,7 +137,42 @@
   </tbody>
 </table>
 {% else %}
-<p class="empty-note">No known vulnerabilities were matched against the discovered services.</p>
+<p class="empty-note">
+  No known vulnerabilities were matched against the discovered services
+  {% if scan.cve_db and scan.cve_db.version %}(signature DB v{{ scan.cve_db.version }},
+  {{ scan.cve_db.signatures }} signatures){% endif %}.
+  {% if scan.posture_findings %}
+  This is signature coverage, not proof of safety — see the exposure
+  findings below.
+  {% endif %}
+</p>
+{% endif %}
+
+{% if scan.posture_findings %}
+<h1 class="section">Exposures (No CVE Match)</h1>
+<p>
+  Risky conditions proven by active probing (HTTP status codes, service
+  identity) that have no CVE identifier. Each is scored through the same
+  deterministic formula with EPSS&nbsp;=&nbsp;0.
+</p>
+<table class="data">
+  <thead>
+  <tr>
+    <th style="width: 46mm;">Finding</th><th style="width: 16mm;">Severity</th>
+    <th style="width: 30mm;">Endpoint</th><th>Evidence</th>
+  </tr>
+  </thead>
+  <tbody>
+  {% for f in scan.posture_findings | sort(attribute="severity", reverse=True) %}
+  <tr>
+    <td><span class="mono">{{ f.id }}</span><br>{{ f.title }}</td>
+    <td><span class="badge {{ cvss_class(f.severity) }}">{{ "%.1f" | format(f.severity) }}</span></td>
+    <td class="mono">{{ f.host }}:{{ f.port }}</td>
+    <td class="mono">{{ f.evidence }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
 {% endif %}
 
 <h1 class="section">Attack Chains</h1>

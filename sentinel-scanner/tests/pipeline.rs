@@ -160,6 +160,84 @@ async fn full_pipeline_detects_redis_and_scores_deterministically() {
     assert_eq!(value["vulnerabilities"][0]["cve_id"], EXPECTED_CVE);
 }
 
+/// Starts a fake unauthenticated nginx: answers `200 OK` with a versioned
+/// Server header to any request. Mirrors the real-world gap (R8): a service
+/// with no CVE match that must still produce an honest non-zero score.
+async fn spawn_fake_webadmin() -> u16 {
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+        .await
+        .expect("bind fake webadmin");
+    let port = listener.local_addr().expect("local addr").port();
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut sock, _peer)) = listener.accept().await else {
+                continue;
+            };
+            tokio::spawn(async move {
+                let mut buf = [0u8; 512];
+                if let Ok(Ok(_)) =
+                    tokio::time::timeout(Duration::from_secs(5), sock.read(&mut buf)).await
+                {
+                    let _ = sock
+                        .write_all(
+                            b"HTTP/1.1 200 OK\r\nServer: nginx/1.18.0\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<html><head><title>Router Admin</title></head></html>",
+                        )
+                        .await;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            });
+        }
+    });
+    port
+}
+
+#[tokio::test]
+async fn posture_findings_score_unauthenticated_web_without_cve() {
+    let port = spawn_fake_webadmin().await;
+    let report = run_scan(&test_config(port)).await.expect("scan runs");
+
+    // The nginx version comes from the HTTP probe, not the banner grabber,
+    // and upgrades the fingerprint to high confidence.
+    let host = &report.hosts[0];
+    let port_entry = host
+        .ports
+        .iter()
+        .find(|p| p.port == port)
+        .expect("port present");
+    assert_eq!(port_entry.service.as_deref(), Some("nginx"));
+    assert_eq!(port_entry.version.as_deref(), Some("1.18.0"));
+
+    // The probe-derived version feeds CVE matching too: nginx 1.18.0 is in
+    // the CVE-2021-23017 range [0.6.18, 1.20.1):
+    //   7.7*0.25 + 0.40*10*0.35 + 0.1*10*0.25 + 0.4*10*0.15
+    //   = 1.925 + 1.4 + 0.25 + 0.6 = 4.175 -> 4.18 (max over posture 2.48)
+    let cves: Vec<&str> = report
+        .vulnerabilities
+        .iter()
+        .map(|v| v.cve_id.as_str())
+        .collect();
+    assert_eq!(cves, vec!["CVE-2021-23017"], "findings: {cves:?}");
+    let posture = report
+        .posture_findings
+        .iter()
+        .find(|f| f.port == port)
+        .expect("posture finding present");
+    assert_eq!(posture.id, "POSTURE-UNAUTH-WEB");
+    assert!(
+        posture.evidence.contains("200"),
+        "evidence: {}",
+        posture.evidence
+    );
+    assert_eq!(
+        report.risk_score, 4.18,
+        "deterministic score (CVE > posture)"
+    );
+
+    // Re-running yields the identical score (determinism).
+    let second = run_scan(&test_config(port)).await.expect("second scan");
+    assert_eq!(second.risk_score, report.risk_score);
+}
+
 #[tokio::test]
 async fn scan_of_dead_host_yields_empty_report() {
     // 127.0.0.2 is not expected to run anything in the sandbox.

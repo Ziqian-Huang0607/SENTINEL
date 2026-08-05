@@ -1,0 +1,18 @@
+{
+  "scan_id": "82e4aafb-9b52-4cfc-9e53-25a455d93a44",
+  "model": "llama3.1:8b",
+  "options": {
+    "num_ctx": 8192,
+    "num_gpu": 1,
+    "num_thread": 4,
+    "temperature": 0.1,
+    "top_p": 0.9,
+    "top_k": 40,
+    "num_predict": 2048,
+    "seed": 0
+  },
+  "raw_text": "{\n  \"reasoning\": \"The provided vulnerability scan reveals exposed/unauthenticated services on multiple hosts.\",\n  \"attack_chains\": [\n    {\n      \"path\": [\"192.168.1.1:80\"],\n      \"description\": \"Gateway/router web admin reachable without authentication\",\n      \"mitre_technique\": \"T1190\",\n      \"confidence\": 0.85,\n      \"impact\": 0.83,\n      \"priority\": 1\n    },\n    {\n      \"path\": [\"192.168.1.1:8080\"],\n      \"description\": \"Gateway/router web admin reachable without authentication\",\n      \"mitre_technique\": \"T1190\",\n      \"confidence\": 0.85,\n      \"impact\": 0.83,\n      \"priority\": 1\n    },\n    {\n      \"path\": [\"192.168.1.102:8080\"],\n      \"description\": \"Web interface reachable without authentication\",\n      \"mitre_technique\": \"T1190\",\n      \"confidence\": 0.8,\n      \"impact\": 0.68,\n      \"priority\": 1\n    },\n    {\n      \"path\": [\"192.168.1.102:9100\"],\n      \"description\": \"Raw printing port accepts unauthenticated job submission\",\n      \"mitre_technique\": \"T1077\",\n      \"confidence\": 0.65,\n      \"impact\": 0.48,\n      \"priority\": 1\n    },\n    {\n      \"path\": [\"192.168.1.253:80\"],\n      \"description\": \"Web interface reachable without authentication\",\n      \"mitre_technique\": \"T1190\",\n      \"confidence\": 0.8,\n      \"impact\": 0.68,\n      \"priority\": 1\n    }\n  ],\n  \"remediation\": {\n    \"daily\": [\n      \"Configure web servers to require authentication for admin interfaces.\",\n      \"Restrict access to raw printing ports.\"\n    ],\n    \"authority\": [\n      \"Implement secure default credentials or disable default accounts.\",\n      \"Rotate passwords and ensure strong password policies.\"\n    ],\n    \"hacker\": [],\n    \"military\": []\n  },\n  \"risk_score\": 3.48,\n  \"observations\": [\"Exposed services on multiple hosts, including web admin interfaces and raw printing ports.\"],\n  \"analyzer_mode\": \"llm\"\n}",
+  "ok": true,
+  "error": null,
+  "ts": 1785818298
+}

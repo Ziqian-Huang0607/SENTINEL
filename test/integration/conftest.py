@@ -40,7 +40,12 @@ def _analyzer_app_import() -> str:
         return "main:app"
     if (ANALYZER_DIR / "app" / "main.py").is_file():
         return "app.main:app"
-    pytest.skip(f"cannot locate FastAPI app under {ANALYZER_DIR} (expected main.py or app/main.py)")
+    if (ANALYZER_DIR / "src" / "main.py").is_file():  # current layout (services.sh)
+        return "src.main:app"
+    pytest.skip(
+        f"cannot locate FastAPI app under {ANALYZER_DIR} "
+        "(expected main.py, app/main.py or src/main.py)"
+    )
     raise AssertionError("unreachable")
 
 

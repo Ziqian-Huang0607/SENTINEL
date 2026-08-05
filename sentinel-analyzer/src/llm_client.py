@@ -18,8 +18,7 @@ from pathlib import Path
 
 import httpx
 from pydantic import ValidationError
-
-from src.attack_chain import CandidateChain
+from src.attack_chain import CandidateChain, ground_chains
 from src.models import (
     OLLAMA_MODEL,
     AnalysisOutput,
@@ -58,6 +57,27 @@ GENERATE_OPTIONS: dict[str, int | float] = {
 # overridable for tests and deployments via SENTINEL_RAW_ARCHIVE_DIR.
 DEFAULT_RAW_ARCHIVE_DIR = "raw_llm_archive"
 
+# Output rules appended to the prompt (and the schema reminder) so chain
+# construction stays grounded and remediation stays defensive. Introduced
+# after an 8B model produced four identical filler chains (uniform T1568,
+# 50%/70%) and an "exploit the CUPS service" remediation item on a
+# finding-light scan.
+ANALYSIS_RULES = (
+    "RULES:\n"
+    "1. Every attack_chain path entry MUST be an observed host or host:port "
+    "from the SCAN JSON above. Invented infrastructure invalidates the "
+    "chain.\n"
+    "2. mitre_technique MUST match the actual weakness of each chain "
+    "(e.g. T1190 for exposed/unauthenticated services, T1040 for cleartext "
+    "protocols, T1078 for default credentials). Do NOT reuse one technique "
+    "across all chains.\n"
+    "3. Remediation items MUST be defensive actions (configure, restrict, "
+    "patch, disable, rotate). NEVER instruct exploitation, attacking, or "
+    "further compromise.\n"
+    "4. When the scan has no vulnerabilities and no posture_findings, "
+    "return an empty attack_chains list — do not invent chains."
+)
+
 SCHEMA_REMINDER = (
     "SCHEMA REMINDER: your previous reply was not valid. Respond with ONE "
     "strict JSON object and nothing else (no prose, no markdown code "
@@ -69,8 +89,8 @@ SCHEMA_REMINDER = (
     '0.0-10.0, "observations": ["str"], "analyzer_mode": "llm"}. '
     "If you include any reasoning or explanation keys (e.g. \"reasoning\"), "
     "they MUST appear FIRST in the JSON object, before all schema fields "
-    "above."
-)
+    "above. "
+) + ANALYSIS_RULES
 
 
 class LLMError(RuntimeError):
@@ -144,7 +164,7 @@ class OllamaClient:
                 last_error = exc
                 continue
             self._archive_raw(scan, raw, ok=True, error=None)
-            return pin_deterministic_risk(analysis, scan)
+            return finalize_analysis(analysis, scan)
         raise last_error if last_error else LLMError("unknown LLM failure")
 
     def _archive_raw(
@@ -197,6 +217,87 @@ def pin_deterministic_risk(analysis: AnalysisOutput, scan: ScanInput) -> Analysi
     return analysis.model_copy(update={"risk_score": pinned})
 
 
+# Offensive phrasing that must never survive into a remediation plan. The
+# analyzer advises the defender; an item telling the operator to "exploit"
+# something (observed from an 8B model on a finding-light scan) is dropped.
+_OFFENSIVE_REMEDIATION_PATTERNS = (
+    "exploit",
+    "compromise",
+    "gain access",
+    "escalate privileges",
+    "brute force",
+    "brute-force",
+    "crack ",
+    "payload",
+    "shell on",
+    "pivot to attack",
+)
+
+
+def enforce_defensive_remediation(analysis: AnalysisOutput) -> tuple[AnalysisOutput, int]:
+    """Drop remediation items phrased as offensive actions.
+
+    Returns ``(analysis, dropped_count)``. Defensive guidance only — this
+    filter is deterministic and applies in LLM mode (fallback remediation
+    comes from the curated library and is defensive by construction).
+    """
+    remediation = analysis.remediation
+    dropped = 0
+    cleaned: dict[str, list[str]] = {}
+    for tier in ("daily", "authority", "hacker", "military"):
+        items = getattr(remediation, tier)
+        kept_items: list[str] = []
+        for item in items:
+            lowered = item.lower()
+            if any(pattern in lowered for pattern in _OFFENSIVE_REMEDIATION_PATTERNS):
+                dropped += 1
+            else:
+                kept_items.append(item)
+        cleaned[tier] = kept_items
+    updated = analysis.model_copy(
+        update={
+            "remediation": remediation.model_copy(update=cleaned),
+        }
+    )
+    return updated, dropped
+
+
+def finalize_analysis(analysis: AnalysisOutput, scan: ScanInput) -> AnalysisOutput:
+    """Post-LLM hardening pipeline, in order:
+
+    1. ground attack chains against observed scan data (drop invented
+       hosts/ports, renumber priorities);
+    2. drop offensively phrased remediation items;
+    3. pin the deterministic risk score;
+    4. pass posture findings through for the report layer.
+
+    Every intervention is recorded as an observation so the report shows
+    exactly what the model got wrong (auditable LLM behavior, R3).
+    """
+    kept_chains, dropped_chains = ground_chains(analysis.attack_chains, scan)
+    analysis = analysis.model_copy(update={"attack_chains": kept_chains})
+    analysis, dropped_offensive = enforce_defensive_remediation(analysis)
+    analysis = pin_deterministic_risk(analysis, scan)
+    notes: list[str] = []
+    if dropped_chains:
+        notes.append(
+            f"Dropped {dropped_chains} LLM attack chain(s) referencing "
+            "hosts/ports absent from the scan (grounding validator)."
+        )
+    if dropped_offensive:
+        notes.append(
+            f"Dropped {dropped_offensive} remediation item(s) phrased as "
+            "offensive actions; remediation is defender-only."
+        )
+    if notes:
+        analysis = analysis.model_copy(
+            update={"observations": [*analysis.observations, *notes]}
+        )
+    return analysis.model_copy(
+        update={"posture_findings": list(scan.posture_findings)}
+    )
+
+
 def build_user_prompt(scan: ScanInput, candidates: list[CandidateChain]) -> str:
     """Build the user prompt embedding scan JSON and candidate chains."""
     candidate_dicts = [asdict(candidate) for candidate in candidates]
@@ -218,7 +319,8 @@ def build_user_prompt(scan: ScanInput, candidates: list[CandidateChain]) -> str:
         '"llm"}.\n'
         "If you include any reasoning or explanation keys (e.g. "
         '"reasoning"), they MUST appear FIRST in the JSON object, before '
-        "all schema fields above."
+        "all schema fields above.\n"
+        f"{ANALYSIS_RULES}"
     )
 
 

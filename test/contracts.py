@@ -16,6 +16,13 @@ KEV override: findings flagged ``kev=True`` (CISA Known Exploited
 Vulnerabilities catalog membership, per the cve_cache seed) floor at 9.0
 (per-finding ``max(raw, KEV_RISK_FLOOR)`` before the scan-level max).
 Evidence: METHODOLOGY.md Ch.8 R1/R2.
+
+R8: posture findings (exposures without a CVE identifier, e.g. an
+unauthenticated router admin page) flow through the same formula with
+``epss = 0`` and no KEV floor, so "0 CVE matches" can never masquerade as
+"no risk". The scan payload also carries ``cve_db`` provenance (signature
+DB version + count) for the report coverage note. Evidence: METHODOLOGY.md
+Ch.8 R8.
 """
 
 from __future__ import annotations
@@ -100,6 +107,28 @@ class Vulnerability(BaseModel):
     kev: bool = False
 
 
+class PostureFinding(BaseModel):
+    """An exposure finding without a CVE identifier (R8).
+
+    ``severity`` is a pseudo-CVSS assigned by the scanner's posture
+    classifier; it enters the risk formula as the CVSS term with EPSS = 0.
+    """
+
+    id: str = Field(pattern=r"^POSTURE-[A-Z0-9-]+$")
+    host: str
+    port: int = Field(ge=1, le=65535)
+    severity: float = Field(ge=0.0, le=10.0)
+    title: str = ""
+    evidence: str = ""
+
+
+class CveDbInfo(BaseModel):
+    """Embedded CVE signature DB provenance (R8 coverage note)."""
+
+    version: str = ""
+    signatures: int = 0
+
+
 class ScanInput(BaseModel):
     """scan.json — scanner output, also the analyzer `/analyze` request body."""
 
@@ -110,6 +139,9 @@ class ScanInput(BaseModel):
     finished_at: datetime
     hosts: list[Host] = Field(default_factory=list)
     vulnerabilities: list[Vulnerability] = Field(default_factory=list)
+    # Additive R8 fields; absent in pre-R8 scan files (default empty).
+    posture_findings: list[PostureFinding] = Field(default_factory=list)
+    cve_db: CveDbInfo = Field(default_factory=CveDbInfo)
     risk_score: float = Field(ge=0.0, le=10.0)
 
 
@@ -141,6 +173,8 @@ class AnalysisOutput(BaseModel):
     risk_score: float = Field(ge=0.0, le=10.0)
     observations: list[str] = Field(default_factory=list)
     analyzer_mode: AnalyzerMode
+    # R8 passthrough: the exposures the chains/remediation were derived from.
+    posture_findings: list[PostureFinding] = Field(default_factory=list)
 
 
 ANALYSIS_KEYS: tuple[str, ...] = (
@@ -149,6 +183,7 @@ ANALYSIS_KEYS: tuple[str, ...] = (
     "risk_score",
     "observations",
     "analyzer_mode",
+    "posture_findings",
 )
 
 
@@ -163,11 +198,21 @@ def per_vuln_risk(
     return max(raw, KEV_RISK_FLOOR) if kev else raw
 
 
-def compute_risk_score(scan: ScanInput | dict) -> float:
-    """Scan-level risk score: max per-vuln score over hosts, rounded to 2dp.
+def per_posture_risk(severity: float, exposure: float, criticality: float) -> float:
+    """Deterministic per-posture-finding risk score (R8).
 
-    Vulnerabilities referencing an undiscovered host contribute nothing, mirroring
-    the rule "host exposure/criticality applied" from SPEC.md.
+    Posture findings have no EPSS signal and are never KEV-listed, so the
+    formula reduces to the CVSS/exposure/criticality terms.
+    """
+    return per_vuln_risk(severity, 0.0, exposure, criticality, kev=False)
+
+
+def compute_risk_score(scan: ScanInput | dict) -> float:
+    """Scan-level risk score: max per-finding score over hosts, rounded to 2dp.
+
+    Vulnerabilities and posture findings (R8, EPSS = 0) referencing an
+    undiscovered host contribute nothing, mirroring the rule "host
+    exposure/criticality applied" from SPEC.md.
 
     Rounded with :func:`round2` so the oracle agrees with the scanner binary
     exactly at decimal half boundaries (e.g. 4.805 -> 4.81).
@@ -186,6 +231,16 @@ def compute_risk_score(scan: ScanInput | dict) -> float:
             EXPOSURE_WEIGHTS[host.trust_zone],
             CRITICALITY_WEIGHTS[host.criticality],
             vuln.kev,
+        )
+        best = max(best, score)
+    for finding in scan.posture_findings:
+        host = hosts_by_ip.get(finding.host)
+        if host is None:
+            continue
+        score = per_posture_risk(
+            finding.severity,
+            EXPOSURE_WEIGHTS[host.trust_zone],
+            CRITICALITY_WEIGHTS[host.criticality],
         )
         best = max(best, score)
     return round2(best)

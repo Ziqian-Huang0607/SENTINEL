@@ -343,8 +343,16 @@ def _render_pdf_fpdf(scan: ScanInput, analysis: AnalysisOutput, out_path: str) -
 
     summary = (
         f"Assessment of {scan.target} at the {scan.tier} tier identified "
-        f"{len(scan.vulnerabilities)} vulnerabilities across {len(scan.hosts)} hosts."
+        f"{len(scan.vulnerabilities)} CVE finding(s) and "
+        f"{len(scan.posture_findings)} exposure(s) without a CVE match "
+        f"across {len(scan.hosts)} hosts."
     )
+    if not scan.vulnerabilities and scan.posture_findings:
+        summary += (
+            " Zero CVE matches is not zero risk: the scanner only matches its "
+            "embedded signature set, and the exposure findings below are scored "
+            "independently of it."
+        )
     if analysis.attack_chains:
         summary += (
             f" The analyzer derived {len(analysis.attack_chains)} attack chain(s)"
@@ -370,8 +378,17 @@ def _render_pdf_fpdf(scan: ScanInput, analysis: AnalysisOutput, out_path: str) -
         ["Hosts discovered", str(len(scan.hosts))],
         ["Open ports observed", str(open_port_count(scan))],
         ["Vulnerabilities matched", str(len(scan.vulnerabilities))],
+        ["Exposures (no CVE match)", str(len(scan.posture_findings))],
         ["Scan risk score", f"{scan.risk_score:.2f} / 10.00"],
         ["Analysis risk score", f"{analysis.risk_score:.2f} / 10.00"],
+        [
+            "Detection coverage",
+            (
+                f"CVE signature DB v{scan.cve_db.version} "
+                f"({scan.cve_db.signatures} signatures); EPSS v4 (30-day); "
+                "CISA KEV floor 9.0"
+            ),
+        ],
     ]
     table(["Attribute", "Value"], scope_rows, [40.0, 138.0])
 
@@ -423,8 +440,49 @@ def _render_pdf_fpdf(scan: ScanInput, analysis: AnalysisOutput, out_path: str) -
         pdf.set_font("helvetica", "I", 9)
         pdf.set_text_color(*_MUTED)
         pdf.multi_cell(
-            0, 5, _latin("No known vulnerabilities were matched against the discovered services.")
+            0,
+            5,
+            _latin(
+                "No known vulnerabilities were matched against the discovered services. "
+                "This is signature coverage, not proof of safety - see the exposure "
+                "findings below."
+            ),
         )
+
+    # ---------------- exposures (no CVE match) ----------------
+    section("Exposures (No CVE Match)")
+    pdf.set_font("helvetica", "I", 8.5)
+    pdf.set_text_color(*_MUTED)
+    pdf.multi_cell(
+        0,
+        4.6,
+        _latin(
+            "Configuration and exposure weaknesses observed by active probing. These "
+            "have no CVE identifier; they are scored through the same deterministic "
+            "formula with EPSS = 0."
+        ),
+    )
+    pdf.ln(1.5)
+    if scan.posture_findings:
+        posture_rows = [
+            [
+                p.id,
+                f"{p.severity:.1f}",
+                f"{p.host}:{p.port}",
+                p.title or "-",
+                p.evidence or "-",
+            ]
+            for p in sorted(scan.posture_findings, key=lambda p: p.severity, reverse=True)
+        ]
+        table(
+            ["Finding", "Sev", "Endpoint", "Title", "Evidence"],
+            posture_rows,
+            [34.0, 11.0, 30.0, 46.0, 57.0],
+        )
+    else:
+        pdf.set_font("helvetica", "I", 9)
+        pdf.set_text_color(*_MUTED)
+        pdf.multi_cell(0, 5, _latin("No exposure findings without a CVE match were observed."))
 
     # ---------------- attack chains ----------------
     section("Attack Chains")

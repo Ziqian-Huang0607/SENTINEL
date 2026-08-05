@@ -2,4 +2,5 @@
 
 pub mod cve_cache;
 pub mod matcher;
+pub mod posture;
 pub mod scorer;

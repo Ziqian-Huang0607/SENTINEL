@@ -1,8 +1,9 @@
 """SARIF 2.1.0 report formatter.
 
-Rules are derived from the CVEs in the scan (helpUri points to NVD);
-results are the individual findings. Level mapping: CVSS >= 9 -> error,
-CVSS >= 7 -> warning, otherwise note.
+Rules are derived from the CVEs in the scan (helpUri points to NVD) plus the
+R8 posture findings (exposures without a CVE; no helpUri); results are the
+individual findings. Level mapping: CVSS/severity >= 9 -> error,
+>= 7 -> warning, otherwise note.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ import json
 from typing import Any
 
 from src import __version__
-from src.generator import AnalysisOutput, ScanInput, Vulnerability
+from src.generator import AnalysisOutput, PostureFinding, ScanInput, Vulnerability
 
 SARIF_VERSION = "2.1.0"
 SARIF_SCHEMA_URI = "https://json.schemastore.org/sarif-2.1.0.json"
@@ -69,12 +70,60 @@ def _result_for(vuln: Vulnerability) -> dict[str, Any]:
     }
 
 
+def _rule_for_posture(finding: PostureFinding) -> dict[str, Any]:
+    """Build a SARIF rule object for a posture finding (no CVE)."""
+    level = level_for_cvss(finding.severity)
+    return {
+        "id": finding.id,
+        "name": finding.id,
+        "shortDescription": {"text": f"{finding.title or finding.id} (severity {finding.severity:.1f})"},
+        "fullDescription": {
+            "text": (finding.title or finding.id)
+            + " Exposure without a CVE identifier; scored with EPSS = 0."
+        },
+        "defaultConfiguration": {"level": level},
+        "properties": {
+            "cvss": finding.severity,
+            "security-severity": f"{finding.severity:.1f}",
+            "tags": ["security", "exposure", "posture"],
+        },
+    }
+
+
+def _result_for_posture(finding: PostureFinding) -> dict[str, Any]:
+    """Build a SARIF result object for a posture finding."""
+    message = finding.title or finding.id
+    if finding.evidence:
+        message = f"{message} Evidence: {finding.evidence}."
+    return {
+        "ruleId": finding.id,
+        "level": level_for_cvss(finding.severity),
+        "message": {"text": f"{message} Affected endpoint: {finding.host}:{finding.port}."},
+        "locations": [
+            {
+                "physicalLocation": {
+                    "artifactLocation": {"uri": f"{finding.host}:{finding.port}"},
+                }
+            }
+        ],
+        "properties": {
+            "cvss": finding.severity,
+            "epss": 0.0,
+            "host": finding.host,
+            "port": finding.port,
+        },
+    }
+
+
 def build_sarif(scan: ScanInput, analysis: AnalysisOutput) -> dict[str, Any]:
     """Build the SARIF 2.1.0 log document for a scan."""
     rules: dict[str, dict[str, Any]] = {}
     for vuln in scan.vulnerabilities:
         rules.setdefault(vuln.cve_id, _rule_for(vuln))
+    for finding in scan.posture_findings:
+        rules.setdefault(finding.id, _rule_for_posture(finding))
     results = [_result_for(vuln) for vuln in scan.vulnerabilities]
+    results += [_result_for_posture(f) for f in scan.posture_findings]
     return {
         "$schema": SARIF_SCHEMA_URI,
         "version": SARIF_VERSION,

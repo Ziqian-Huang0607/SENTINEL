@@ -12,16 +12,18 @@ pub mod output;
 pub mod vuln;
 
 pub use output::json::{
-    Criticality, HostReport, PortReport, ScanReport, Tier, TrustZone, VulnReport,
+    Criticality, HostReport, PortReport, PostureReport, ScanReport, Tier, TrustZone, VulnReport,
 };
 
 use crate::config::scope::{Scope, ScopeError};
 use crate::network::discovery::discover_hosts;
-use crate::network::fingerprint::{fingerprint_port, guess_os, Fingerprint};
+use crate::network::fingerprint::{fingerprint_port, guess_os, Confidence, Fingerprint};
+use crate::network::http_probe::{probe_http, should_probe, HttpProbe};
 use crate::network::packet::ProbeEngine;
 use crate::network::portscan::scan_hosts;
 use crate::vuln::cve_cache::{CveCache, CveCacheError};
 use crate::vuln::matcher::match_cves;
+use crate::vuln::posture::classify as classify_posture;
 use crate::vuln::scorer::scan_risk_score;
 use chrono::Utc;
 use std::collections::HashMap;
@@ -125,7 +127,27 @@ pub async fn run_scan(config: &ScanConfig) -> Result<ScanReport, ScanError> {
     let scanned: Vec<_> = scanned.into_iter().filter(|h| !h.open.is_empty()).collect();
 
     // Stage 3: fingerprint every open port (concurrency-bounded).
-    let fingerprints = fingerprint_all(&scanned, engine, config.concurrency).await;
+    let mut fingerprints = fingerprint_all(&scanned, engine, config.concurrency).await;
+
+    // Stage 3b (R8): HTTP-probe web-ish ports. The `Server` header upgrades
+    // fingerprints with product + version (feeds CVE matching); the status
+    // code proves authentication state (feeds posture findings).
+    let probes = http_probe_all(&scanned, &fingerprints, engine, config.concurrency).await;
+    for ((ip, port), probe) in &probes {
+        if let Some((product, version)) = probe.server_product_version() {
+            let fp = fingerprints.entry((*ip, *port)).or_default();
+            let generic = matches!(fp.service.as_deref(), None | Some("http") | Some("httpd"));
+            if generic {
+                fp.service = Some(product);
+            }
+            if fp.version.is_none() {
+                fp.version = Some(version);
+            }
+            if fp.service.is_some() && fp.version.is_some() {
+                fp.confidence = Confidence::High;
+            }
+        }
+    }
 
     // Stage 4+5: match CVEs and score deterministically.
     let cache = CveCache::in_memory()?;
@@ -133,6 +155,7 @@ pub async fn run_scan(config: &ScanConfig) -> Result<ScanReport, ScanError> {
 
     let mut hosts: Vec<HostReport> = Vec::new();
     let mut vulnerabilities: Vec<VulnReport> = Vec::new();
+    let mut posture_findings: Vec<PostureReport> = Vec::new();
     let mut score_args: Vec<(f64, f64, bool, TrustZone, Criticality)> = Vec::new();
 
     for host in &scanned {
@@ -160,6 +183,13 @@ pub async fn run_scan(config: &ScanConfig) -> Result<ScanReport, ScanError> {
                     });
                     score_args.push((entry.cvss, entry.epss, entry.kev, zone, criticality));
                 }
+            }
+            // R8: posture findings (exposures without CVE), scored with
+            // EPSS = 0 through the same deterministic formula.
+            let probe = probes.get(&(host.ip, port));
+            for finding in classify_posture(&host.ip, port, &fp, probe) {
+                score_args.push((finding.severity, 0.0, false, zone, criticality));
+                posture_findings.push(finding);
             }
             ports.push(PortReport {
                 port,
@@ -197,9 +227,54 @@ pub async fn run_scan(config: &ScanConfig) -> Result<ScanReport, ScanError> {
         started_at: started_at.to_rfc3339(),
         finished_at: finished_at.to_rfc3339(),
         hosts,
+        cve_db: output::json::CveDbInfo {
+            version: crate::vuln::cve_cache::SEED_VERSION.to_string(),
+            signatures: cache.len()?,
+        },
         vulnerabilities,
+        posture_findings,
         risk_score,
     })
+}
+
+/// HTTP-probes every web-ish open port (concurrency-bounded). Candidate
+/// selection uses the stage-3 fingerprints: well-known web ports, HTTP-ish
+/// services, and banners that already speak HTTP.
+async fn http_probe_all(
+    scanned: &[network::portscan::HostPorts],
+    fingerprints: &HashMap<(Ipv4Addr, u16), Fingerprint>,
+    engine: ProbeEngine,
+    concurrency: usize,
+) -> HashMap<(Ipv4Addr, u16), HttpProbe> {
+    let semaphore = Arc::new(Semaphore::new(concurrency.max(1)));
+    let mut set: JoinSet<((Ipv4Addr, u16), Option<HttpProbe>)> = JoinSet::new();
+
+    for host in scanned {
+        for &port in &host.open {
+            let fp = fingerprints.get(&(host.ip, port));
+            if !should_probe(
+                port,
+                fp.and_then(|f| f.service.as_deref()),
+                fp.and_then(|f| f.banner.as_deref()),
+            ) {
+                continue;
+            }
+            let permit = Arc::clone(&semaphore);
+            let ip = host.ip;
+            set.spawn(async move {
+                let _guard = permit.acquire_owned().await.ok();
+                ((ip, port), probe_http(ip, port, engine).await)
+            });
+        }
+    }
+
+    let mut out = HashMap::new();
+    while let Some(res) = set.join_next().await {
+        if let Ok(((ip, port), Some(probe))) = res {
+            out.insert((ip, port), probe);
+        }
+    }
+    out
 }
 
 /// Fingerprints every open port of every scanned host, returning a

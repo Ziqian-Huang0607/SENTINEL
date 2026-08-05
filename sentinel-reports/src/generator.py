@@ -61,6 +61,28 @@ class Vulnerability(BaseModel):
     summary: str = ""
 
 
+class PostureFinding(BaseModel):
+    """An exposure finding without a CVE identifier (R8)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str
+    host: str
+    port: int = Field(ge=0, le=65535)
+    severity: float = Field(ge=0.0, le=10.0)
+    title: str = ""
+    evidence: str = ""
+
+
+class CveDbInfo(BaseModel):
+    """Embedded CVE signature DB provenance (R8 coverage note)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    version: str = ""
+    signatures: int = 0
+
+
 class ScanInput(BaseModel):
     """Scanner output / analyzer ScanInput contract (SPEC.md section 1)."""
 
@@ -73,6 +95,9 @@ class ScanInput(BaseModel):
     finished_at: datetime
     hosts: list[Host] = Field(default_factory=list)
     vulnerabilities: list[Vulnerability] = Field(default_factory=list)
+    # Additive R8 fields; absent in pre-R8 scan files (default empty).
+    posture_findings: list[PostureFinding] = Field(default_factory=list)
+    cve_db: CveDbInfo = Field(default_factory=CveDbInfo)
     risk_score: float = Field(ge=0.0, le=10.0)
 
 

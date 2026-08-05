@@ -115,5 +115,6 @@ def test_fallback_observations_summarize_counts(scan: ScanInput) -> None:
     joined = " ".join(out.observations)
     assert "3 host(s)" in joined
     assert "5 open port(s)" in joined
-    assert "1 vulnerability(ies)" in joined
+    assert "1 CVE finding(s)" in joined
+    assert "posture exposure(s)" in joined
     assert "fallback" in joined

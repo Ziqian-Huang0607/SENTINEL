@@ -416,8 +416,33 @@ Every unresolved item from the conflict zones and corrections becomes scheduled 
 | R5 | Pin EPSS version semantics (v3/v4 = 30-day window) and Ollama backend version in deployment docs | Prevents silent metric/backend drift from invalidating measured performance and score calibration | CZ-4/correction 6; [^173^][^179^] |
 | R6 | Keep multi-step reasoning out of constrained JSON payloads; reasoning keys first where present | Resolves the constrained-decoding tradeoff without surrendering schema guarantees | CZ-3; [^172^][^70^] |
 | R7 | Update compliance docs BOD 22-01 → BOD 26-04; document thresholds 4.0/2.5/1.5/0.5 as justified internal constants; replace TEMPEST with a physical/emissions-security note | Removes citations to a revoked directive and a category-mismatched framework; makes the one unverifiable parameter class explicit | CZ-5/corrections 4–5; [^175^][^177^] |
+| R8 | Field-hardening round: active HTTP probing with auth-state classification; posture findings (exposures without CVEs) scored through the deterministic formula at EPSS = 0; LLM attack-chain grounding against observed infrastructure; defensive-only remediation filter; signature-DB coverage note in reports | Converts "0 CVE matches → 0.00 risk" from a false-clean into an honest signal; the 2026-08 home-network field test showed signature blindness is the dominant failure mode on real consumer networks | §8.4; field test 2026-08 (§8.4.1) |
 
 The roadmap is a strengthening program, not a repair list, and the distinction is substantive. R1 and R2 align SENTINEL with the strongest quantitative evidence this audit found: likelihood-dominant weighting and exploitation-observed overrides are the two features every serious published framework shares and SENTINEL lacked; after them, no known evidence-backed objection to the risk engine remains. R3 and R5 are reproducibility hardening, converting claims this report makes — determinism, measured throughput, calibrated scores — from point-in-time observations into permanently auditable properties. R4 is the only item that creates new knowledge rather than consuming it: a first-of-kind precision measurement for unprivileged fingerprinting, included because that absence was the one evidentiary gap no literature search could close. R6 and R7 are precision work — small in diff size, large in what they protect, since schema compliance without reasoning quality is hollow and compliance prose citing revoked directives is an active liability. Every item carries its evidence anchor, so the roadmap can be re-audited against the standard that produced it.
+
+## 8.4 R8 — the field-test honesty round
+
+R8 is the first roadmap item sourced from a live deployment rather than the literature audit, and it is the strongest validation of this report's central discipline: an evidence-driven system must treat its own negative results as evidence.
+
+### 8.4.1 The failure mode: signature blindness masquerading as safety
+
+On 2026-08-03 SENTINEL was run against a real consumer home network (4 hosts, 9 open ports: router admin HTTP on the gateway, CUPS/IPP 631, nginx, and two unidentified high ports). The scan matched **zero CVEs** and reported **risk 0.00** — a false clean. The network was not clean: the router's administrative interface answered `GET /` with 200 and no authentication challenge, the print stack was reachable without credentials, and the nginx version string matched a resolver CVE in the seed set that passive fingerprinting had failed to extract. Three compounding defects produced the 0.00:
+
+1. **Passive-only fingerprinting.** Without an HTTP request, the scanner could not read `Server` headers or page titles, so version-based CVE matching silently under-fired.
+2. **CVE-only scoring.** Exposures with no CVE identifier — unauthenticated admin panels, open IPP, cleartext services — contributed nothing to the risk score, so "no signature matched" was indistinguishable from "nothing is wrong."
+3. **Ungrounded LLM output.** The attack chains the LLM returned used one generic technique (T1568) with uniform 50%/70% confidence/impact regardless of the weakness, and one remediation item was phrased as an offensive action ("exploit unauthenticated access"), violating the analyzer's defender-only contract.
+
+### 8.4.2 The fixes and their invariants
+
+- **Active HTTP probing** (`network/http_probe.rs`): web-ish ports receive `GET /`; status, `Server`, and title are parsed and the endpoint is classified Unauth / Gated / Unknown (401/403 and login redirects are Gated; every other 200/30x is Unauth). A probed product/version upgrades the fingerprint — in the pipeline test the probe-derived `nginx/1.18.0` matches CVE-2021-23017 and lifts the fixture score from 2.48 (posture-only) to 4.18.
+- **Posture findings** (`vuln/posture.rs`): seven exposure classes with fixed pseudo-severities (unauth web 6.5, gateway-class 7.5, unauth IPP 6.5, unauth datastore 7.5, cleartext 6.5, legacy LPD 5.3, raw printer 4.3) enter the deterministic formula with EPSS = 0 and no KEV floor. The gateway heuristic (last octet .1/.254) explicitly excludes loopback so test fixtures on 127.0.0.1 are never misclassified. Invariant: **zero CVE matches with posture findings present can never render as 0.00 risk**.
+- **Grounded chains** (`attack_chain.py::ground_chains`): every LLM chain step must reference an observed host and an observed open port or finding location; violations drop the chain, renumber priorities, and append an `observations[]` audit note. Per-weakness technique mapping (T1190 for exposed services, T1040 for cleartext) replaces single-technique filler.
+- **Defensive-only remediation** (`llm_client.py::enforce_defensive_remediation`): items matching offensive phrasing ("exploit", "compromise", "gain access", "brute force", "pivot to attack", …) are dropped with an audit note, in both LLM and fallback modes.
+- **Coverage provenance** (`cve_db` in scan.json, report coverage note): every report states the signature DB version and count next to the findings, so the reader can see exactly what "0 CVE matches" covered.
+
+### 8.4.3 What R8 does not claim
+
+Posture severities are justified internal constants in the same class as the tier thresholds (CZ-5): ordinal, monotonic with attacker value, and documented as hand-set. They deliberately score below real CVEs on equivalent endpoints (EPSS = 0 forfeits the 0.35 likelihood term), so an exposure never outranks an exploited-in-the-wild vulnerability. Active probing is limited to a single benign `GET /` per web port — no credential testing, no path enumeration — preserving the authorization boundary the CONFIRM gate establishes.
 
 # Chapter 9 — Conclusion
 

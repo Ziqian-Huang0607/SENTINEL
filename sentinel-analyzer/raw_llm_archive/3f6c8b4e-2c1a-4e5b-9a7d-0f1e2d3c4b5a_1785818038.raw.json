@@ -1,0 +1,18 @@
+{
+  "scan_id": "3f6c8b4e-2c1a-4e5b-9a7d-0f1e2d3c4b5a",
+  "model": "llama3.1:8b",
+  "options": {
+    "num_ctx": 8192,
+    "num_gpu": 1,
+    "num_thread": 4,
+    "temperature": 0.1,
+    "top_p": 0.9,
+    "top_k": 40,
+    "num_predict": 2048,
+    "seed": 0
+  },
+  "raw_text": "{\n  \"reasoning\": \"Based on the provided vulnerability scan data, the following threat analysis is generated.\",\n  \"attack_chains\": [\n    {\n      \"path\": [\"192.0.2.45:6379\"],\n      \"description\": \"Unauthenticated Redis instance reachable from the internet.\",\n      \"mitre_technique\": \"T1190\",\n      \"confidence\": 0.9,\n      \"impact\": 1.0,\n      \"priority\": 1\n    },\n    {\n      \"path\": [\"192.0.2.45:22\"],\n      \"description\": \"SSH signal-handler race condition (regreSSHion class).\",\n      \"mitre_technique\": \"T1210\",\n      \"confidence\": 0.71,\n      \"impact\": 0.99,\n      \"priority\": 1\n    },\n    {\n      \"path\": [\"192.0.2.46:6379\"],\n      \"description\": \"Unauthenticated Redis instance on workstation segment.\",\n      \"mitre_technique\": \"T1190\",\n      \"confidence\": 0.71,\n      \"impact\": 0.81,\n      \"priority\": 1\n    }\n  ],\n  \"remediation\": {\n    \"daily\": [\"Configure Redis to require authentication\", \"Patch Redis instance on db01\"],\n    \"authority\": [\"Restrict SSH access to only trusted networks\", \"Rotate SSH keys on db01\"],\n    \"hacker\": [\"Disable Redis service on workstation segment\", \"Implement additional security measures for workstation segment\"],\n    \"military\": [\"Develop and implement a comprehensive security plan for the environment\"]\n  },\n  \"risk_score\": 7.92,\n  \"observations\": [\"The scan revealed two unauthenticated Redis instances, one reachable from the internet and the other on a workstation segment.\", \"An SSH signal-handler race condition was also identified.\"],\n  \"analyzer_mode\": \"llm\"\n}",
+  "ok": true,
+  "error": null,
+  "ts": 1785818038
+}

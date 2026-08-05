@@ -214,6 +214,33 @@ REMEDIATION_LIBRARY: dict[str, dict[Tier, tuple[str, ...]]] = {
             "NSA/CSS guidance.",
         ),
     },
+    "posture_exposure": {
+        Tier.daily: (
+            "Require authentication on every web/IPP admin interface and "
+            "disable legacy cleartext services (LPD 515, raw printing 9100, "
+            "telnet) within 30 days per CIS Controls v8 L1.",
+            "Restrict router/gateway administration to a dedicated "
+            "management VLAN; never expose admin panels to the general LAN.",
+        ),
+        Tier.authority: (
+            "Close unauthenticated interfaces and replace cleartext "
+            "protocols with SSH/IPPS within 7 days per NIST 800-53 Moderate "
+            "and ISO 27001.",
+            "Firewall printer and management services (515, 631, 9100) to "
+            "authorized admin subnets only.",
+        ),
+        Tier.hacker: (
+            "Remediate unauthenticated admin interfaces within 24 hours per "
+            "NIST 800-53 High; rotate any credentials reachable through "
+            "them and audit access logs for MITRE ATT&CK T1190/T1040 "
+            "activity.",
+        ),
+        Tier.military: (
+            "Disconnect unauthenticated and legacy cleartext services "
+            "immediately; permit administration only from hardened "
+            "privileged-access workstations per NSA/CSS and CNSS 1253.",
+        ),
+    },
 }
 
 

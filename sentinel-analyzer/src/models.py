@@ -160,6 +160,33 @@ class Vulnerability(BaseModel):
     kev: bool = False
 
 
+class PostureFinding(BaseModel):
+    """An exposure finding without a CVE identifier (R8).
+
+    Emitted by the scanner for observed risky conditions — unauthenticated
+    web/IPP interfaces, legacy cleartext services, exposed data stores —
+    and scored through the same deterministic formula with EPSS = 0.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    host: str
+    port: int = Field(ge=0, le=65535)
+    severity: float = Field(ge=0.0, le=10.0)
+    title: str = ""
+    evidence: str = ""
+
+
+class CveDbInfo(BaseModel):
+    """Provenance of the scanner's embedded CVE signature DB (R8)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    version: str = ""
+    signatures: int = 0
+
+
 class ScanInput(BaseModel):
     """Scanner output contract (scan.json); also the analyzer input."""
 
@@ -172,6 +199,9 @@ class ScanInput(BaseModel):
     finished_at: datetime
     hosts: list[Host] = Field(default_factory=list)
     vulnerabilities: list[Vulnerability] = Field(default_factory=list)
+    # Additive R8 fields; absent in pre-R8 scan files (default empty).
+    posture_findings: list[PostureFinding] = Field(default_factory=list)
+    cve_db: CveDbInfo = Field(default_factory=CveDbInfo)
     risk_score: float = Field(ge=0.0, le=10.0)
 
 
@@ -209,6 +239,9 @@ class AnalysisOutput(BaseModel):
     risk_score: float = Field(ge=0.0, le=10.0)
     observations: list[str] = Field(default_factory=list)
     analyzer_mode: AnalyzerMode
+    # R8: exposure findings passed through from the scan so reports can
+    # render "0 CVE matches != no risk" sections. Not LLM-generated.
+    posture_findings: list[PostureFinding] = Field(default_factory=list)
 
 
 class ReportRequest(BaseModel):

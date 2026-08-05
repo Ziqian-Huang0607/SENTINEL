@@ -58,7 +58,7 @@ against four operator-selectable security tiers.
 
 | Component | Tech | Role |
 |-----------|------|------|
-| `sentinel-scanner` | Rust (tokio, pnet, rusqlite) | Host discovery, TCP connect scan, service fingerprinting, embedded CVE cache, deterministic scoring |
+| `sentinel-scanner` | Rust (tokio, pnet, rusqlite) | Host discovery, TCP connect scan, service fingerprinting + active HTTP probing, embedded CVE cache, posture (exposure) findings, deterministic scoring |
 | `sentinel-analyzer` | Python 3.12, FastAPI :8710 | Attack-chain construction, tiered remediation, Ollama LLM client with automatic rule-based fallback |
 | `sentinel-reports` | Python, FastAPI :8711 | Branded PDF, merged JSON, and SARIF 2.1.0 report generation |
 | `sentinel-cli` | Go 1.22 (cobra) | Operator entry point with scope CONFIRM gate and audit logging |
@@ -189,6 +189,35 @@ evidence audit in `METHODOLOGY.md` Ch.8 R1–R2.
 | internal | 0.4 | | workstation | 0.4 |
 | mgmt | 0.1 | | iot | 0.1 |
 | airgap | 0.0 | | | |
+
+## Exposure detection without CVEs (R8)
+
+A scan with **zero CVE matches is not a zero-risk network** — it may simply be
+signature blindness. SENTINEL therefore assesses posture directly:
+
+- **Active HTTP probing.** Web-ish ports (80, 631, 8080, …) receive a real
+  `GET /`; the scanner parses the status line, `Server` header, and page title,
+  and classifies the endpoint as unauthenticated (200), gated (401/403 or a
+  login redirect), or unknown. A probed `Server: nginx/1.18.0` upgrades the
+  fingerprint and feeds version-based CVE matching.
+- **Posture findings.** Exposures that have no CVE — unauthenticated web
+  interfaces (6.5; **7.5** on a probable gateway), unauthenticated IPP/CUPS
+  (6.5), unauthenticated datastores like Redis/MongoDB (7.5), cleartext
+  services such as Telnet/FTP (6.5), legacy LPD (5.3), raw printer ports
+  (4.3) — are emitted as `posture_findings` and scored through the same
+  deterministic formula with `EPSS = 0`. An open router admin page can never
+  hide behind an empty CVE list again.
+- **Grounded attack chains.** Every chain the LLM proposes is validated
+  against the observed infrastructure; steps referencing hosts or ports the
+  scanner never saw are dropped, and each weakness maps to its own MITRE
+  ATT&CK technique (T1190 for exposed services, T1040 for cleartext, …)
+  instead of one generic filler technique.
+- **Defensive-only remediation.** Remediation items phrased as offensive
+  actions ("exploit …", "compromise …") are dropped automatically; every drop
+  is recorded in `observations[]`.
+- **Honest coverage note.** Reports state the embedded signature DB version
+  and signature count alongside the findings, so the reader always knows what
+  "0 CVE matches" actually covered.
 
 ## Memory budget — 8GB M1 MacBook Air
 

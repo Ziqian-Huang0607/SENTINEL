@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from src.models import (
     CRITICALITY_FACTOR,
     EXPOSURE_FACTOR,
+    AttackChain,
     Criticality,
     Host,
     Port,
@@ -89,6 +90,20 @@ HTTP_LIKE_SERVICES: frozenset[str] = frozenset(
 HIGH_CVSS_THRESHOLD = 7.0
 HIGH_EPSS_THRESHOLD = 0.2
 MAX_LATERAL_TARGETS = 5
+
+# Posture finding classes (R8, scanner src/vuln/posture.rs) mapped to the
+# ATT&CK technique that actually matches the weakness, plus per-class
+# confidence and impact base. Fixes the "uniform T1568 filler" failure seen
+# in LLM output on finding-free scans.
+POSTURE_TECHNIQUES: dict[str, tuple[str, float, float]] = {
+    "POSTURE-UNAUTH-WEB-GATEWAY": ("T1190", 0.85, 0.65),
+    "POSTURE-UNAUTH-WEB": ("T1190", 0.8, 0.5),
+    "POSTURE-UNAUTH-IPP": ("T1190", 0.8, 0.55),
+    "POSTURE-UNAUTH-DATASTORE": ("T1190", 0.9, 0.6),
+    "POSTURE-CLEARTEXT": ("T1040", 0.75, 0.45),
+    "POSTURE-LEGACY-LPD": ("T1190", 0.7, 0.4),
+    "POSTURE-RAW-PRINTER": ("T1190", 0.65, 0.3),
+}
 
 
 @dataclass(frozen=True)
@@ -307,6 +322,33 @@ def extract_candidate_chains(scan: ScanInput) -> list[CandidateChain]:
                     )
                 )
 
+    # R8: posture findings — real exposures with no CVE identifier. Chain
+    # risk reuses the deterministic posture score (EPSS = 0) so chain
+    # ordering agrees with the report headline score.
+    for finding in scan.posture_findings:
+        technique, confidence, impact_base = POSTURE_TECHNIQUES.get(
+            finding.id, ("T1190", 0.7, 0.45)
+        )
+        host = hosts_by_ip.get(finding.host)
+        zone = host.trust_zone if host else TrustZone.internal
+        crit = host.criticality if host else Criticality.workstation
+        impact = _impact(EXPOSURE_FACTOR[zone], CRITICALITY_FACTOR[crit], impact_base)
+        risk = compute_risk_score(finding.severity, 0.0, zone, crit)
+        chains.append(
+            CandidateChain(
+                rule="posture_exposure",
+                path=(f"{finding.host}:{finding.port}",),
+                description=(
+                    f"{finding.title} on {finding.host}:{finding.port} "
+                    f"(severity {finding.severity}; {finding.evidence})."
+                ),
+                mitre_technique=technique,
+                confidence=confidence,
+                impact=impact,
+                risk=risk,
+            )
+        )
+
     for vuln in scan.vulnerabilities:
         if vuln.cvss >= HIGH_CVSS_THRESHOLD and vuln.epss >= HIGH_EPSS_THRESHOLD:
             host = hosts_by_ip.get(vuln.host)
@@ -360,3 +402,51 @@ def _dedupe(chains: list[CandidateChain]) -> list[CandidateChain]:
             seen.add(key)
             unique.append(chain)
     return unique
+
+
+def observed_path_steps(scan: ScanInput) -> frozenset[str]:
+    """All path steps a chain may legitimately reference.
+
+    Every observed host IP, every ``host:port`` open-port pair, plus the
+    finding locations from vulnerabilities and posture findings. The LLM
+    grounding validator drops any chain whose path leaves this set — chain
+    steps must describe the scanned environment, not invented hosts.
+    """
+    steps: set[str] = set()
+    for host in scan.hosts:
+        steps.add(host.ip)
+        for port in host.ports:
+            if _is_open(port):
+                steps.add(f"{host.ip}:{port.port}")
+    for vuln in scan.vulnerabilities:
+        steps.add(vuln.host)
+        steps.add(f"{vuln.host}:{vuln.port}")
+    for finding in scan.posture_findings:
+        steps.add(finding.host)
+        steps.add(f"{finding.host}:{finding.port}")
+    return frozenset(steps)
+
+
+def ground_chains(
+    chains: list[AttackChain], scan: ScanInput
+) -> tuple[list[AttackChain], int]:
+    """Drop chains referencing hosts/ports absent from the scan.
+
+    Returns ``(kept, dropped_count)``. A chain is dropped when ANY path
+    step is unobserved — partially grounded speculation is still
+    speculation, and reports must never show invented infrastructure.
+    Priorities are renumbered after filtering to stay rank-consistent.
+    """
+    observed = observed_path_steps(scan)
+    kept: list[AttackChain] = []
+    dropped = 0
+    for chain in chains:
+        if chain.path and all(step in observed for step in chain.path):
+            kept.append(chain)
+        else:
+            dropped += 1
+    kept = [
+        chain.model_copy(update={"priority": rank})
+        for rank, chain in enumerate(kept, start=1)
+    ]
+    return kept, dropped

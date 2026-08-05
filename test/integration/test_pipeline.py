@@ -19,6 +19,7 @@ or via pytest:   pytest test/integration/test_pipeline.py
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -37,17 +38,21 @@ SCANNER_CANDIDATES = (
     ROOT / "sentinel-scanner" / "target" / "debug" / "sentinel-scanner",
 )
 SCAN_TIMEOUT_S = 300
-# LLM inference on a laptop (Llama 3.1 8B) can take minutes for a rich scan;
-# the rule-based fallback answers in milliseconds. The timeout is per-mode.
-FALLBACK_ANALYZE_TIMEOUT_S = 60.0
-LLM_ANALYZE_TIMEOUT_S = 600.0
 
 
 def _scanner_binary() -> Path | None:
+    # Explicit override wins (e.g. CARGO_TARGET_DIR outside the checkout).
+    override = os.environ.get("SENTINEL_SCANNER_BIN")
+    if override and Path(override).is_file():
+        return Path(override)
     for candidate in SCANNER_CANDIDATES:
         if candidate.is_file():
             return candidate
     return None
+# LLM inference on a laptop (Llama 3.1 8B) can take minutes for a rich scan;
+# the rule-based fallback answers in milliseconds. The timeout is per-mode.
+FALLBACK_ANALYZE_TIMEOUT_S = 60.0
+LLM_ANALYZE_TIMEOUT_S = 600.0
 
 
 @pytest.fixture(scope="session")

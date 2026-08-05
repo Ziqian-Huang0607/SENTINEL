@@ -17,8 +17,10 @@ from contracts import (  # noqa: E402
     CRITICALITY_WEIGHTS,
     EXPOSURE_WEIGHTS,
     AnalysisOutput,
+    PostureFinding,
     ScanInput,
     compute_risk_score,
+    per_posture_risk,
     per_vuln_risk,
     round2,
     sample_analysis,
@@ -124,6 +126,87 @@ def test_analysis_requires_analyzer_mode() -> None:
     del payload["analyzer_mode"]
     with pytest.raises(ValidationError):
         AnalysisOutput.model_validate(payload)
+
+
+def test_pre_r8_scan_documents_still_validate() -> None:
+    """R8 fields are additive: a scan.json without them defaults to empty."""
+    scan = ScanInput.model_validate(sample_scan())
+    assert scan.posture_findings == []
+    assert scan.cve_db.version == ""
+    assert scan.cve_db.signatures == 0
+    assert compute_risk_score(scan) == 7.92  # legacy pin unchanged
+
+
+def test_posture_finding_scores_through_formula_with_epss_zero() -> None:
+    """R8: an exposure without a CVE still scores — never a silent 0.00.
+
+    Unauthenticated web (severity 6.5) on a loopback mgmt/ws host:
+      6.5*0.25 + 0 + 0.1*10*0.25 + 0.4*10*0.15 = 1.625 + 0.25 + 0.6 = 2.48
+    Gateway-class exposure (7.5) on a dmz/dc host:
+      7.5*0.25 + 0 + 0.7*10*0.25 + 1.0*10*0.15 = 1.875 + 1.75 + 1.5 = 5.13
+    """
+    assert per_posture_risk(6.5, 0.1, 0.4) == pytest.approx(2.475)
+    assert round2(per_posture_risk(6.5, 0.1, 0.4)) == 2.48
+    assert per_posture_risk(7.5, 0.7, 1.0) == pytest.approx(5.125)
+    assert round2(per_posture_risk(7.5, 0.7, 1.0)) == 5.13
+
+
+def test_posture_findings_lift_scan_score_above_cve_only() -> None:
+    """A posture finding outscoring every CVE must drive the scan score."""
+    scan = sample_scan()
+    scan["posture_findings"] = [
+        {
+            "id": "POSTURE-UNAUTH-WEB-GATEWAY",
+            "host": "192.0.2.45",  # internet/dc -> 7.5*0.25+2.5+1.5 = 5.875
+            "port": 80,
+            "severity": 7.5,
+            "title": "Unauthenticated web interface on a probable gateway",
+            "evidence": "GET / -> 200; Server: nginx/1.18.0",
+        }
+    ]
+    assert compute_risk_score(scan) == 7.92  # CVE pin still dominates here
+    scan["vulnerabilities"] = []
+    assert compute_risk_score(scan) == 5.88  # posture alone, round2(5.875)
+
+
+def test_posture_finding_on_unknown_host_contributes_nothing() -> None:
+    scan = sample_scan()
+    scan["vulnerabilities"] = []
+    scan["posture_findings"] = [
+        {
+            "id": "POSTURE-UNAUTH-WEB",
+            "host": "203.0.113.99",  # not in hosts[]
+            "port": 8080,
+            "severity": 6.5,
+        }
+    ]
+    assert compute_risk_score(scan) == 0.0
+
+
+def test_posture_finding_rejects_bad_id_and_severity() -> None:
+    with pytest.raises(ValidationError):
+        PostureFinding.model_validate(
+            {"id": "unauth-web", "host": "192.0.2.1", "port": 80, "severity": 6.5}
+        )
+    with pytest.raises(ValidationError):
+        PostureFinding.model_validate(
+            {"id": "POSTURE-UNAUTH-WEB", "host": "192.0.2.1", "port": 80, "severity": 11.0}
+        )
+
+
+def test_analysis_output_passes_posture_findings_through() -> None:
+    analysis = sample_analysis()
+    analysis["posture_findings"] = [
+        {
+            "id": "POSTURE-UNAUTH-IPP",
+            "host": "192.0.2.45",
+            "port": 631,
+            "severity": 6.5,
+            "title": "Unauthenticated IPP print service",
+        }
+    ]
+    parsed = AnalysisOutput.model_validate(analysis)
+    assert parsed.posture_findings[0].id == "POSTURE-UNAUTH-IPP"
 
 
 def test_scan_rejects_bad_cve_and_bad_tier() -> None:

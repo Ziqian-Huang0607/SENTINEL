@@ -32,7 +32,12 @@ def _sort_key(chain: CandidateChain) -> tuple[float, str, tuple[str, ...], str]:
 
 
 def recompute_risk_score(scan: ScanInput) -> float:
-    """Max per-vuln deterministic risk score (host context applied)."""
+    """Max per-finding deterministic risk score (host context applied).
+
+    Covers CVE vulnerabilities (CVSS + EPSS, KEV floor) and R8 posture
+    findings (severity, EPSS = 0) through the same formula — identical to
+    the scanner's scan-level aggregation.
+    """
     hosts_by_ip = {host.ip: host for host in scan.hosts}
     best = 0.0
     for vuln in scan.vulnerabilities:
@@ -43,6 +48,11 @@ def recompute_risk_score(scan: ScanInput) -> float:
             best,
             compute_risk_score(vuln.cvss, vuln.epss, zone, crit, kev=vuln.kev),
         )
+    for finding in scan.posture_findings:
+        host = hosts_by_ip.get(finding.host)
+        zone = host.trust_zone if host else TrustZone.internal
+        crit = host.criticality if host else Criticality.workstation
+        best = max(best, compute_risk_score(finding.severity, 0.0, zone, crit))
     return round(best, 2)
 
 
@@ -78,6 +88,7 @@ def analyze_fallback(scan: ScanInput) -> AnalysisOutput:
         risk_score=risk_score,
         observations=observations,
         analyzer_mode=AnalyzerMode.fallback,
+        posture_findings=list(scan.posture_findings),
     )
 
 
@@ -97,8 +108,9 @@ def _build_observations(
     profile = tier_profile(scan.tier)
     observations = [
         (
-            f"Analyzed {len(scan.hosts)} host(s), {open_ports} open port(s) "
-            f"and {len(scan.vulnerabilities)} vulnerability(ies) for tier "
+            f"Analyzed {len(scan.hosts)} host(s), {open_ports} open port(s), "
+            f"{len(scan.vulnerabilities)} CVE finding(s) and "
+            f"{len(scan.posture_findings)} posture exposure(s) for tier "
             f"'{scan.tier.value}'."
         ),
         (
