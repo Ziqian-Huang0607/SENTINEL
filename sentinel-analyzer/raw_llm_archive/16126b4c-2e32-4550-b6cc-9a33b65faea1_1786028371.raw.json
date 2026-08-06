@@ -1,0 +1,18 @@
+{
+  "scan_id": "16126b4c-2e32-4550-b6cc-9a33b65faea1",
+  "model": "llama3.1:8b",
+  "options": {
+    "num_ctx": 8192,
+    "num_gpu": 1,
+    "num_thread": 4,
+    "temperature": 0.1,
+    "top_p": 0.9,
+    "top_k": 40,
+    "num_predict": 2048,
+    "seed": 0
+  },
+  "raw_text": "{\"reasoning\": \"No vulnerabilities found in the scan data.\", \n\"attack_chains\": [], \n\"remediation\": {\"daily\": [\"Configure firewalls to restrict incoming traffic\"], \n                \"authority\": [\"Restrict access to sensitive services\"], \n                \"hacker\": [\"Rotate default credentials\"], \n                \"military\": [\"Patch known vulnerabilities\"]}, \n\"risk_score\": 0.0, \n\"observations\": [], \n\"analyzer_mode\": \"llm\"}",
+  "ok": true,
+  "error": null,
+  "ts": 1786028371
+}

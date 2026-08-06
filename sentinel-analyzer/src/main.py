@@ -24,7 +24,6 @@ from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
-
 from src.attack_chain import extract_candidate_chains
 from src.fallback_analyzer import analyze_fallback
 from src.llm_client import (

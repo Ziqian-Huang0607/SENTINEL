@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 from fastapi.testclient import TestClient
-
 from src.service import app
 
 client = TestClient(app)

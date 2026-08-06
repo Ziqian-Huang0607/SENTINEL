@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.generator import generate
 
 MIN_PDF_BYTES = 20 * 1024

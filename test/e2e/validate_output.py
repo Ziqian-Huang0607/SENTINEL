@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Validate the scan.json / analysis.json artifacts of a SENTINEL CLI e2e run.
 
 Checks both files against the full ScanInput / AnalysisOutput contracts
@@ -26,8 +25,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # test/ directory
 
 try:
-    from pydantic import ValidationError
-
     from contracts import (
         RISK_TOLERANCE,
         AnalysisOutput,
@@ -35,6 +32,7 @@ try:
         compute_risk_score,
         round2,
     )
+    from pydantic import ValidationError
 except ImportError as exc:  # pragma: no cover - environment issue, not a test failure
     print(f"ERROR: cannot import contract dependencies: {exc}")
     print("Hint: run `make build` (creates sentinel-analyzer/.venv with pydantic).")

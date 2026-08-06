@@ -151,6 +151,13 @@ docker compose stop ollama
 make ui    # launches the PySide6 ops-center (cd sentinel-ui && python -m sentinel_ui)
 ```
 
+Five pages: Dashboard, New Scan, Results, **Agent**, Reports. The New Scan
+form's *"Run AI agent investigation after the scan"* toggle (on by default)
+runs sentinel-agent against the scan you just took — no second sweep — and the
+Agent page shows grounded findings, per-target investigations with their
+evidence transcripts, and memory drift. Generated reports automatically
+include the Agent Investigation section whenever an agent report exists.
+
 ## Security tiers
 
 | Tier | Threat model | Compliance baseline | Patch SLA (critical) | Risk threshold |
@@ -219,6 +226,44 @@ signature blindness. SENTINEL therefore assesses posture directly:
   and signature count alongside the findings, so the reader always knows what
   "0 CVE matches" actually covered.
 
+## Agent investigations (sentinel-agent)
+
+The scanner tells you *what is there*; the agent works out *what it is and why
+it matters*. `sentinel-agent` runs an observe → hypothesize → probe → conclude
+loop per interesting target: the model (local Ollama only — network data never
+leaves the machine) picks tools, reads real responses, and must ground every
+finding in transcript evidence.
+
+```bash
+make agent TARGET=192.168.1.0/24 TIER=daily     # interactive CONFIRM gate
+# or directly:
+cd sentinel-agent && python -m src --target 192.168.1.0/24 --tier daily
+```
+
+- **Benign tools only.** Nine probes (`http_get`, `grab_banner`, `tls_hello`,
+  `ipp_enumerate`, `mdns_browse`, `smb_probe`, `dns_reverse`, `cve_lookup`,
+  `default_panel_check`). No credential attempts, no exploit payloads. Every
+  tool enforces the confirmed scope and raises `ScopeViolation` on anything
+  outside it; loopback/RFC1918 only.
+- **Grounded findings.** Each finding cites transcript evidence ids (E1, E2…);
+  anything citing an id that does not exist is rejected. Severity comes from
+  the finding *class* (`SERVICE-IDENT` 2.0, `MISCONFIG` 5.0,
+  `SENSITIVE-SERVICE` 5.5, `DEFAULT-PANEL` 7.0), never from the model, and
+  feeds the same deterministic risk formula as posture findings (EPSS = 0,
+  no KEV floor).
+- **Playbook fallback.** Without Ollama (or `SENTINEL_AGENT_MODEL=playbook`)
+  the same tools run in a fixed deterministic order — the investigation still
+  happens, the report says so in `observations[]`.
+- **Network memory.** Every scan is recorded in `~/.sentinel/memory.db`
+  (sqlite); the agent reports drift since the last scan: new/gone hosts,
+  new/closed ports, version changes, auth changes.
+- **Same gate, same audit.** The CLI requires typing `CONFIRM` and appends
+  every attempt — including aborts — to `~/.sentinel/audit.log`, with the
+  exact schema of the Go CLI. Exit codes 0 ok / 1 error / 2 aborted.
+- **Report integration.** `--report` hands {scan, analysis, agent} to the
+  analyzer/reports services; every format gains an *Agent Investigation*
+  section (findings, per-target investigations, drift).
+
 ## Memory budget — 8GB M1 MacBook Air
 
 Apple silicon runs the full stack, including llama3.1:8b, inside 8 GB of
@@ -242,7 +287,7 @@ Inference latency on this machine is gated by
 | Command | What runs |
 |---------|-----------|
 | `make test` | unit + integration + e2e |
-| `make test-unit` | cargo test, go test, pytest for analyzer/reports + contract tests |
+| `make test-unit` | cargo test, go test, pytest for analyzer/reports/agent + contract tests |
 | `make test-integration` | compose analyzer+reports, scanner→analyzer pipeline, API contracts |
 | `make test-e2e` | CLI scan of 127.0.0.1/32 + output/report validators |
 | `make test-llm-memory` | hardware gates (SKIP cleanly when Ollama is absent) |
@@ -259,6 +304,7 @@ sentinel-scanner/    Rust scanner (cargo)
 sentinel-analyzer/   FastAPI analyzer :8710
 sentinel-reports/    FastAPI report service :8711
 sentinel-cli/        Go operator CLI
+sentinel-agent/      AI investigation agent (Ollama tool-use loop + playbook)
 sentinel-ui/         PySide6 desktop GUI
 test/                unit / integration / e2e / hardware suites
 docker-compose.yml   service orchestration (profiles: llm, cli)

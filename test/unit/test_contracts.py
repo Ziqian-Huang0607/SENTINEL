@@ -13,7 +13,7 @@ from pydantic import ValidationError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # test/ directory
 
-from contracts import (  # noqa: E402
+from contracts import (
     CRITICALITY_WEIGHTS,
     EXPOSURE_WEIGHTS,
     AnalysisOutput,

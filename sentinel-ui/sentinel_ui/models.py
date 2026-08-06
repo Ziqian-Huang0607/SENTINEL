@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 APP_NAME = "SENTINEL"
 ANALYZER_DEFAULT_URL = "http://127.0.0.1:8710"
@@ -186,6 +186,81 @@ class HealthStatus(BaseModel):
     mode: AnalyzerMode
 
 
+class AgentFinding(BaseModel):
+    """One grounded agent finding (mirror of sentinel-agent models, §4)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str
+    finding_class: str = ""
+    host: str = ""
+    port: int = 0
+    severity: float = 0.0
+    title: str = ""
+    detail: str = ""
+    evidence: list[dict] = Field(default_factory=list)
+    confidence: float = 0.0
+
+    def endpoint(self) -> str:
+        """``host:port`` display form."""
+        return f"{self.host}:{self.port}" if self.port else self.host
+
+    def evidence_ids(self) -> str:
+        """Comma-joined transcript evidence ids (E1, E2, …)."""
+        return ", ".join(str(e.get("id", "")) for e in self.evidence if e.get("id"))
+
+
+class TargetInvestigation(BaseModel):
+    """One per-target agent investigation summary."""
+
+    model_config = ConfigDict(extra="allow")
+
+    host: str = ""
+    ports: list[int] = Field(default_factory=list)
+    trigger: str = ""
+    status: str = ""
+    turns: int = 0
+    summary: str = ""
+    findings: list[AgentFinding] = Field(default_factory=list)
+    transcript_path: str = ""
+
+
+class DriftEvent(BaseModel):
+    """One network-memory drift event."""
+
+    model_config = ConfigDict(extra="allow")
+
+    kind: str = ""
+    host: str = ""
+    port: int | None = None
+    before: str = ""
+    after: str = ""
+    ts: str = ""
+
+    def endpoint(self) -> str:
+        """``host:port`` display form."""
+        return f"{self.host}:{self.port}" if self.port is not None else self.host
+
+
+class AgentReport(BaseModel):
+    """agent_report.json contract (optional third report input, R9)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    agent_version: str = ""
+    scan_id: str = ""
+    target: str = ""
+    tier: str = ""
+    started_at: str = ""
+    finished_at: str = ""
+    model: str = ""
+    investigations: list[TargetInvestigation] = Field(default_factory=list)
+    findings: list[AgentFinding] = Field(default_factory=list)
+    drift: list[DriftEvent] = Field(default_factory=list)
+    risk_score: float = 0.0
+    observations: list[str] = Field(default_factory=list)
+
+
 class ReportResponse(BaseModel):
     """Analyzer ``POST /report`` payload mapping format to saved file path."""
 
@@ -204,3 +279,5 @@ class ScanRequest:
     scanner_binary: str = ""
     analyzer_url: str = ANALYZER_DEFAULT_URL
     allow_public: bool = False
+    run_agent: bool = True
+    agent_dir: str = ""

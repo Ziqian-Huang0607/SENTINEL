@@ -12,7 +12,14 @@ import json
 from typing import Any
 
 from src import __version__
-from src.generator import AnalysisOutput, PostureFinding, ScanInput, Vulnerability
+from src.generator import (
+    AgentFinding,
+    AgentReport,
+    AnalysisOutput,
+    PostureFinding,
+    ScanInput,
+    Vulnerability,
+)
 
 SARIF_VERSION = "2.1.0"
 SARIF_SCHEMA_URI = "https://json.schemastore.org/sarif-2.1.0.json"
@@ -115,7 +122,58 @@ def _result_for_posture(finding: PostureFinding) -> dict[str, Any]:
     }
 
 
-def build_sarif(scan: ScanInput, analysis: AnalysisOutput) -> dict[str, Any]:
+def _rule_for_agent(finding: AgentFinding) -> dict[str, Any]:
+    """Build a SARIF rule object for an agent finding."""
+    level = level_for_cvss(finding.severity)
+    return {
+        "id": finding.id,
+        "name": finding.id,
+        "shortDescription": {
+            "text": f"{finding.title or finding.id} (severity {finding.severity:.1f})"
+        },
+        "fullDescription": {
+            "text": (finding.detail or finding.title or finding.id)
+            + " Agent-investigated finding with cited probe evidence."
+        },
+        "defaultConfiguration": {"level": level},
+        "properties": {
+            "cvss": finding.severity,
+            "security-severity": f"{finding.severity:.1f}",
+            "tags": ["security", "exposure", "agent"],
+        },
+    }
+
+
+def _result_for_agent(finding: AgentFinding) -> dict[str, Any]:
+    """Build a SARIF result object for an agent finding."""
+    message = finding.title or finding.id
+    if finding.evidence:
+        message = f"{message} Evidence: {', '.join(finding.evidence)}."
+    return {
+        "ruleId": finding.id,
+        "level": level_for_cvss(finding.severity),
+        "message": {"text": f"{message} Affected endpoint: {finding.host}:{finding.port}."},
+        "locations": [
+            {
+                "physicalLocation": {
+                    "artifactLocation": {"uri": f"{finding.host}:{finding.port}"},
+                }
+            }
+        ],
+        "properties": {
+            "cvss": finding.severity,
+            "epss": 0.0,
+            "host": finding.host,
+            "port": finding.port,
+            "confidence": finding.confidence,
+            "findingClass": finding.finding_class,
+        },
+    }
+
+
+def build_sarif(
+    scan: ScanInput, analysis: AnalysisOutput, agent: AgentReport | None = None
+) -> dict[str, Any]:
     """Build the SARIF 2.1.0 log document for a scan."""
     rules: dict[str, dict[str, Any]] = {}
     for vuln in scan.vulnerabilities:
@@ -124,6 +182,10 @@ def build_sarif(scan: ScanInput, analysis: AnalysisOutput) -> dict[str, Any]:
         rules.setdefault(finding.id, _rule_for_posture(finding))
     results = [_result_for(vuln) for vuln in scan.vulnerabilities]
     results += [_result_for_posture(f) for f in scan.posture_findings]
+    if agent is not None:
+        for finding in agent.findings:
+            rules.setdefault(finding.id, _rule_for_agent(finding))
+        results += [_result_for_agent(f) for f in agent.findings]
     return {
         "$schema": SARIF_SCHEMA_URI,
         "version": SARIF_VERSION,
@@ -150,18 +212,24 @@ def build_sarif(scan: ScanInput, analysis: AnalysisOutput) -> dict[str, Any]:
     }
 
 
-def render_sarif(scan: ScanInput, analysis: AnalysisOutput, out_path: str) -> str:
+def render_sarif(
+    scan: ScanInput,
+    analysis: AnalysisOutput,
+    out_path: str,
+    agent: AgentReport | None = None,
+) -> str:
     """Write the scan findings as a SARIF 2.1.0 log file.
 
     Args:
         scan: Validated scanner output.
         analysis: Validated analyzer output.
         out_path: Destination file path.
+        agent: Optional validated agent report (agent findings included).
 
     Returns:
         The path written to.
     """
-    document = build_sarif(scan, analysis)
+    document = build_sarif(scan, analysis, agent=agent)
     with open(out_path, "w", encoding="utf-8") as fh:
         json.dump(document, fh, indent=2, ensure_ascii=False)
         fh.write("\n")

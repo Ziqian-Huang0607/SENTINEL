@@ -175,6 +175,79 @@
 </table>
 {% endif %}
 
+{% if agent %}
+<h1 class="section">Agent Investigation</h1>
+<p>
+  Autonomous investigation (model: <span class="mono">{{ agent.model }}</span>).
+  Every finding cites probe evidence from the investigation transcript;
+  severities are fixed per finding class and scored with EPSS&nbsp;=&nbsp;0.
+</p>
+{% if agent.findings %}
+<table class="data">
+  <thead>
+  <tr>
+    <th style="width: 40mm;">Finding</th><th style="width: 24mm;">Class</th>
+    <th style="width: 14mm;">Severity</th><th style="width: 26mm;">Endpoint</th>
+    <th>Title</th><th style="width: 18mm;">Evidence</th>
+  </tr>
+  </thead>
+  <tbody>
+  {% for f in agent.findings | sort(attribute="severity", reverse=True) %}
+  <tr>
+    <td class="mono">{{ f.id }}</td>
+    <td class="mono">{{ f.finding_class }}</td>
+    <td><span class="badge {{ cvss_class(f.severity) }}">{{ "%.1f" | format(f.severity) }}</span></td>
+    <td class="mono">{{ f.host }}:{{ f.port }}</td>
+    <td>{{ f.title }}</td>
+    <td class="mono">{{ f.evidence | join(", ") }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty-note">The agent produced no findings.</p>
+{% endif %}
+{% if agent.investigations %}
+<table class="data">
+  <thead>
+  <tr>
+    <th style="width: 34mm;">Target</th><th style="width: 26mm;">Trigger</th>
+    <th style="width: 26mm;">Status</th><th style="width: 12mm;">Turns</th><th>Summary</th>
+  </tr>
+  </thead>
+  <tbody>
+  {% for inv in agent.investigations %}
+  <tr>
+    <td class="mono">{{ inv.host }}:{{ inv.ports | join(",") }}</td>
+    <td class="mono">{{ inv.trigger }}</td>
+    <td class="mono">{{ inv.status }}</td>
+    <td class="mono">{{ inv.turns }}</td>
+    <td>{{ inv.summary }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% if agent.drift %}
+<h2>Network drift since previous scan</h2>
+<table class="data">
+  <thead>
+  <tr><th style="width: 34mm;">Change</th><th style="width: 44mm;">Endpoint</th><th>Before</th><th>After</th></tr>
+  </thead>
+  <tbody>
+  {% for d in agent.drift %}
+  <tr>
+    <td class="mono">{{ d.kind }}</td>
+    <td class="mono">{% if d.port is not none %}{{ d.host }}:{{ d.port }}{% else %}{{ d.host }}{% endif %}</td>
+    <td class="mono">{{ d.before }}</td>
+    <td class="mono">{{ d.after }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endif %}
+
 <h1 class="section">Attack Chains</h1>
 {% if analysis.attack_chains %}
 {% for chain in analysis.attack_chains | sort(attribute="priority") %}

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from src.models import Tier
 from src.remediation import (
     REMEDIATION_LIBRARY,

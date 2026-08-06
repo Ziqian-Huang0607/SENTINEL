@@ -137,6 +137,63 @@ class AnalysisOutput(BaseModel):
     analyzer_mode: AnalyzerMode = "fallback"
 
 
+class AgentFinding(BaseModel):
+    """One grounded agent finding (docs/agent-spec.md section 4)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str
+    finding_class: str = "MISCONFIG"
+    host: str
+    port: int = Field(ge=0, le=65535)
+    severity: float = Field(ge=0.0, le=10.0)
+    title: str = ""
+    detail: str = ""
+    evidence: list[str] = Field(default_factory=list)
+    confidence: float = Field(ge=0.0, le=1.0, default=0.0)
+
+
+class DriftEvent(BaseModel):
+    """One network-memory drift event."""
+
+    model_config = ConfigDict(extra="allow")
+
+    kind: str
+    host: str
+    port: int | None = None
+    before: str = ""
+    after: str = ""
+    ts: datetime | None = None
+
+
+class TargetInvestigation(BaseModel):
+    """One per-target agent investigation summary."""
+
+    model_config = ConfigDict(extra="allow")
+
+    host: str
+    ports: list[int] = Field(default_factory=list)
+    trigger: str = ""
+    status: str = "concluded"
+    turns: int = 0
+    summary: str = ""
+    transcript_path: str = ""
+
+
+class AgentReport(BaseModel):
+    """agent_report.json contract (optional third report input)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    agent_version: str = ""
+    model: str = "playbook"
+    investigations: list[TargetInvestigation] = Field(default_factory=list)
+    findings: list[AgentFinding] = Field(default_factory=list)
+    drift: list[DriftEvent] = Field(default_factory=list)
+    risk_score: float = Field(default=0.0, ge=0.0, le=10.0)
+    observations: list[str] = Field(default_factory=list)
+
+
 def _report_stem(scan_id: str) -> str:
     """Return a filesystem-safe report filename stem for a scan id."""
     safe = "".join(c if c.isalnum() or c in "-_" else "-" for c in scan_id)
@@ -148,6 +205,7 @@ def generate(
     analysis: dict[str, Any],
     formats: list[str],
     out_dir: str,
+    agent: dict[str, Any] | None = None,
 ) -> dict[str, str]:
     """Generate SENTINEL reports in the requested formats.
 
@@ -157,6 +215,8 @@ def generate(
         formats: Any subset of ``["pdf", "json", "sarif"]``.
         out_dir: Directory the report files are written to (created if
             missing).
+        agent: Optional agent_report.json document (AgentReport contract);
+            when present, an Agent Investigation section is rendered.
 
     Returns:
         Mapping of format name to the absolute path of the generated file.
@@ -168,6 +228,7 @@ def generate(
     """
     scan_model = ScanInput.model_validate(scan)
     analysis_model = AnalysisOutput.model_validate(analysis)
+    agent_model = AgentReport.model_validate(agent) if agent is not None else None
 
     unknown = [f for f in formats if f not in SUPPORTED_FORMATS]
     if unknown:
@@ -186,9 +247,15 @@ def generate(
     for fmt in formats:
         target = out_path / f"{stem}.{fmt}"
         if fmt == "pdf":
-            files["pdf"] = pdf_formatter.render_pdf(scan_model, analysis_model, str(target))
+            files["pdf"] = pdf_formatter.render_pdf(
+                scan_model, analysis_model, str(target), agent=agent_model
+            )
         elif fmt == "json":
-            files["json"] = json_formatter.render_json(scan_model, analysis_model, str(target))
+            files["json"] = json_formatter.render_json(
+                scan_model, analysis_model, str(target), agent=agent_model
+            )
         elif fmt == "sarif":
-            files["sarif"] = sarif_formatter.render_sarif(scan_model, analysis_model, str(target))
+            files["sarif"] = sarif_formatter.render_sarif(
+                scan_model, analysis_model, str(target), agent=agent_model
+            )
     return files

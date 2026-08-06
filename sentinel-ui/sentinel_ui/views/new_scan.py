@@ -28,6 +28,8 @@ OUTPUT_FORMATS = ("json", "pdf", "sarif")
 
 _SETTINGS_SCANNER = "scanner/binary"
 _SETTINGS_ANALYZER = "analyzer/url"
+_SETTINGS_AGENT_ENABLED = "agent/enabled"
+_SETTINGS_AGENT_DIR = "agent/dir"
 
 
 class ScopeConfirmDialog(QDialog):
@@ -128,6 +130,16 @@ class NewScanView(QWidget):
             formats_row.addWidget(check)
         formats_row.addStretch(1)
         form.addRow("Output formats", formats_row)
+
+        self._agent_check = QCheckBox("Run AI agent investigation after the scan")
+        self._agent_check.setToolTip(
+            "The agent probes interesting targets with benign tools, grounds every "
+            "finding in transcript evidence, and reports drift from network memory."
+        )
+        self._agent_check.setChecked(
+            self._settings.value(_SETTINGS_AGENT_ENABLED, True, type=bool)
+        )
+        form.addRow("", self._agent_check)
         layout.addWidget(card)
 
         advanced = QGroupBox("Advanced")
@@ -153,6 +165,12 @@ class NewScanView(QWidget):
             self._settings.value(_SETTINGS_SCANNER, "", type=str)
         )
         advanced_form.addRow("Scanner binary", self._scanner_edit)
+
+        self._agent_dir_edit = QLineEdit(
+            self._settings.value(_SETTINGS_AGENT_DIR, "", type=str)
+        )
+        self._agent_dir_edit.setPlaceholderText("default: <repo>/sentinel-agent")
+        advanced_form.addRow("Agent directory", self._agent_dir_edit)
 
         self._allow_public_check = QCheckBox("Allow public ranges")
         advanced_form.addRow("", self._allow_public_check)
@@ -191,6 +209,8 @@ class NewScanView(QWidget):
 
         self._settings.setValue(_SETTINGS_ANALYZER, self._analyzer_edit.text().strip())
         self._settings.setValue(_SETTINGS_SCANNER, self._scanner_edit.text().strip())
+        self._settings.setValue(_SETTINGS_AGENT_ENABLED, self._agent_check.isChecked())
+        self._settings.setValue(_SETTINGS_AGENT_DIR, self._agent_dir_edit.text().strip())
 
         formats = [fmt for fmt, check in self._format_checks.items() if check.isChecked()]
         self.scan_requested.emit(
@@ -203,6 +223,8 @@ class NewScanView(QWidget):
                 scanner_binary=self._scanner_edit.text().strip(),
                 analyzer_url=self._analyzer_edit.text().strip() or ANALYZER_DEFAULT_URL,
                 allow_public=self._allow_public_check.isChecked(),
+                run_agent=self._agent_check.isChecked(),
+                agent_dir=self._agent_dir_edit.text().strip(),
             )
         )
 

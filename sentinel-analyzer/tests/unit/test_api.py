@@ -9,7 +9,6 @@ import httpx
 import pytest
 import respx
 from fastapi.testclient import TestClient
-
 from src import main
 from src.fallback_analyzer import analyze_fallback
 from src.llm_client import LLMError, OllamaClient
@@ -149,6 +148,39 @@ def test_report_forwards_to_reports_service(
     assert forwarded["scan"]["scan_id"] == scan_payload["scan_id"]
     assert forwarded["analysis"]["analyzer_mode"] == "fallback"
     assert forwarded["formats"] == ["pdf", "json"]
+
+
+def test_report_forwards_agent_document_verbatim(
+    monkeypatch: pytest.MonkeyPatch, scan_payload: dict
+) -> None:
+    """R9: the optional agent document survives the analyzer hop untouched."""
+    monkeypatch.setattr(main, "probe_ollama", _probe_false)
+    monkeypatch.setenv("REPORTS_URL", "http://reports.test")
+    analysis = analyze_fallback(ScanInput.model_validate(scan_payload))
+    agent = {
+        "agent_version": "0.1.0",
+        "scan_id": scan_payload["scan_id"],
+        "model": "playbook",
+        "investigations": [{"host": "127.0.0.1", "status": "concluded"}],
+        "findings": [],
+        "drift": [{"kind": "NEW_PORT", "host": "127.0.0.1", "port": 8888}],
+    }
+    body = {
+        "scan": scan_payload,
+        "analysis": analysis.model_dump(mode="json"),
+        "formats": ["json"],
+        "agent": agent,
+    }
+    with respx.mock(base_url="http://reports.test") as router:
+        route = router.post("/report").mock(
+            return_value=httpx.Response(200, json={"files": {}})
+        )
+        with TestClient(main.app) as client:
+            response = client.post("/report", json=body)
+
+    assert response.status_code == 200
+    forwarded = json.loads(route.calls[0].request.content)
+    assert forwarded["agent"] == agent
 
 
 def test_report_reports_service_down_gives_502(

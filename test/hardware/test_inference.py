@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Hardware gate: a small llama3.1:8b analysis must complete within budget.
 
 Sends one fixed, small analysis prompt to the local Ollama server and times

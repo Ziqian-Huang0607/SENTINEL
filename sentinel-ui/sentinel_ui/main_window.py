@@ -20,14 +20,22 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .models import APP_NAME, AnalysisOutput, HealthStatus, ScanInput, ScanRequest
+from .models import (
+    APP_NAME,
+    AgentReport,
+    AnalysisOutput,
+    HealthStatus,
+    ScanInput,
+    ScanRequest,
+)
+from .views.agent import AgentView
 from .views.dashboard import STATUS_CAPTIONS, DashboardView
 from .views.new_scan import NewScanView
 from .views.reports import ReportsView
 from .views.results import ResultsView
-from .workers import AnalyzeWorker, HealthWorker, ReportWorker, ScanWorker
+from .workers import AgentWorker, AnalyzeWorker, HealthWorker, ReportWorker, ScanWorker
 
-NAV_ITEMS = ("Dashboard", "New Scan", "Results", "Reports")
+NAV_ITEMS = ("Dashboard", "New Scan", "Results", "Agent", "Reports")
 
 
 class MainWindow(QMainWindow):
@@ -40,7 +48,9 @@ class MainWindow(QMainWindow):
 
         self._scan: ScanInput | None = None
         self._analysis: AnalysisOutput | None = None
+        self._agent: AgentReport | None = None
         self._last_request: ScanRequest | None = None
+        self._work_dir: Path | None = None
         self._workers: list[object] = []
 
         central = QWidget()
@@ -53,8 +63,15 @@ class MainWindow(QMainWindow):
         self._dashboard = DashboardView()
         self._new_scan = NewScanView()
         self._results = ResultsView()
+        self._agent_view = AgentView()
         self._reports = ReportsView()
-        for page in (self._dashboard, self._new_scan, self._results, self._reports):
+        for page in (
+            self._dashboard,
+            self._new_scan,
+            self._results,
+            self._agent_view,
+            self._reports,
+        ):
             self._pages.addWidget(page)
         root.addWidget(self._pages, 1)
         self.setCentralWidget(central)
@@ -132,6 +149,7 @@ class MainWindow(QMainWindow):
         self._new_scan.set_scanning(True)
         stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
         work_dir = Path.home() / ".sentinel" / "scans" / stamp
+        self._work_dir = work_dir
         worker = ScanWorker(request, work_dir, self)
         worker.progressed.connect(
             lambda line: self.statusBar().showMessage(line, 3000)
@@ -145,6 +163,8 @@ class MainWindow(QMainWindow):
         """Store the scan and immediately submit it for analysis."""
         self._scan = scan
         self._analysis = None
+        self._agent = None
+        self._agent_view.set_data(None)
         self._dashboard.update_state(scan, None)
         self._results.set_data(scan, None)
         self.statusBar().showMessage("Scan complete — analyzing …")
@@ -175,6 +195,44 @@ class MainWindow(QMainWindow):
         self._pages.setCurrentWidget(self._results)
         self._nav_group.button(2).setChecked(True)
         self.statusBar().showMessage("Analysis complete", 5000)
+        self._maybe_start_agent()
+
+    def _maybe_start_agent(self) -> None:
+        """Launch the agent worker when the operator enabled it and a scan exists."""
+        request = self._last_request
+        if (
+            request is None
+            or not request.run_agent
+            or self._scan is None
+            or self._work_dir is None
+        ):
+            return
+        scan_file = self._work_dir / "scan.json"
+        worker = AgentWorker(request, scan_file, self._work_dir, self)
+        worker.progressed.connect(
+            lambda line: self.statusBar().showMessage(line, 3000)
+        )
+        worker.succeeded.connect(self._on_agent_finished)
+        worker.failed.connect(self._on_agent_failed)
+        self.statusBar().showMessage("Agent investigating targets …")
+        self._track_worker(worker)
+
+    def _on_agent_finished(self, report: AgentReport) -> None:
+        """Apply the agent report to the Agent page and report pipeline."""
+        self._agent = report
+        self._agent_view.set_data(report)
+        self._nav_group.button(3).setChecked(True)
+        self._pages.setCurrentWidget(self._agent_view)
+        self.statusBar().showMessage(
+            f"Agent investigation complete ({report.model}) — "
+            f"{len(report.findings)} finding(s), {len(report.drift)} drift event(s)",
+            8000,
+        )
+
+    def _on_agent_failed(self, message: str) -> None:
+        """Report an agent failure; scan and analysis results remain available."""
+        self.statusBar().showMessage("Agent investigation failed", 5000)
+        QMessageBox.warning(self, "Agent Investigation Failed", message)
 
     def _on_analysis_failed(self, message: str) -> None:
         """Report an analyzer failure; scan results remain available."""
@@ -191,7 +249,9 @@ class MainWindow(QMainWindow):
         analyzer_url = (
             self._last_request.analyzer_url if self._last_request is not None else ""
         )
-        worker = ReportWorker(analyzer_url, self._scan, self._analysis, formats, self)
+        worker = ReportWorker(
+            analyzer_url, self._scan, self._analysis, formats, agent=self._agent, parent=self
+        )
         worker.succeeded.connect(self._on_report_finished)
         worker.failed.connect(self._reports.show_error)
         self._track_worker(worker)

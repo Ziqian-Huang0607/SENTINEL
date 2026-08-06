@@ -23,7 +23,7 @@ httpx = pytest.importorskip("httpx", reason="httpx required for integration test
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "test"))  # makes `contracts` importable
 
-from contracts import AnalysisOutput  # noqa: E402
+from contracts import AnalysisOutput
 
 REQUEST_TIMEOUT_S = 30.0
 # /analyze latency depends on the analyzer mode: the rule-based fallback

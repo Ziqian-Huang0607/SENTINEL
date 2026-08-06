@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Hardware gate: Ollama peak RSS during a generation must stay under budget.
 
 Targets the 8GB M1 MacBook Air budget (default --max-mb 5120, i.e. 5 GB for

@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[2]
 ANALYZER_DIR = ROOT / "sentinel-analyzer"
 sys.path.insert(0, str(ROOT / "test"))  # makes `contracts` importable
 
-from contracts import sample_scan  # noqa: E402
+from contracts import sample_scan
 
 ANALYZER_PORT = 8710
 REPORTS_PORT = 8711

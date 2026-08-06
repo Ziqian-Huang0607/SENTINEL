@@ -31,7 +31,7 @@ httpx = pytest.importorskip("httpx", reason="httpx required for integration test
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "test"))  # makes `contracts` importable
 
-from contracts import ANALYSIS_KEYS, compute_risk_score  # noqa: E402
+from contracts import ANALYSIS_KEYS, compute_risk_score
 
 SCANNER_CANDIDATES = (
     ROOT / "sentinel-scanner" / "target" / "release" / "sentinel-scanner",
@@ -78,6 +78,7 @@ def scan_artifact(tmp_path_factory: pytest.TempPathFactory) -> Path:
         ],
         capture_output=True,
         text=True,
+        check=False,
         timeout=SCAN_TIMEOUT_S,
     )
     assert proc.returncode == 0, (

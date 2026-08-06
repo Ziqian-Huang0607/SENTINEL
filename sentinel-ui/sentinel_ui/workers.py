@@ -11,8 +11,16 @@ from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
 
-from .api import AnalyzerClient, AnalyzerError, ScannerError, run_scan
-from .models import AnalysisOutput, HealthStatus, ScanInput, ScanRequest
+from .api import (
+    AgentError,
+    AnalyzerClient,
+    AnalyzerError,
+    ScannerError,
+    default_agent_dir,
+    run_agent,
+    run_scan,
+)
+from .models import AgentReport, AnalysisOutput, HealthStatus, ScanInput, ScanRequest
 
 
 class HealthWorker(QThread):
@@ -98,6 +106,45 @@ class AnalyzeWorker(QThread):
         self.succeeded.emit(analysis)
 
 
+class AgentWorker(QThread):
+    """Run sentinel-agent against the current scan document."""
+
+    progressed = Signal(str)
+    succeeded = Signal(object)  # AgentReport
+    failed = Signal(str)
+
+    def __init__(
+        self,
+        request: ScanRequest,
+        scan_file: Path,
+        work_dir: Path,
+        parent: object | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._request = request
+        self._scan_file = scan_file
+        self._work_dir = work_dir
+
+    def run(self) -> None:
+        """Execute the agent subprocess and emit the parsed agent report."""
+        try:
+            report: AgentReport = run_agent(
+                agent_dir=Path(self._request.agent_dir)
+                if self._request.agent_dir
+                else default_agent_dir(),
+                target=self._request.target,
+                tier=self._request.tier,
+                scan_file=self._scan_file,
+                work_dir=self._work_dir,
+                scanner_binary=self._request.scanner_binary,
+                on_output=self.progressed.emit,
+            )
+        except AgentError as exc:
+            self.failed.emit(str(exc))
+            return
+        self.succeeded.emit(report)
+
+
 class ReportWorker(QThread):
     """Request report artifacts from the analyzer ``POST /report`` endpoint."""
 
@@ -110,6 +157,7 @@ class ReportWorker(QThread):
         scan: ScanInput,
         analysis: AnalysisOutput,
         formats: list[str],
+        agent: AgentReport | None = None,
         parent: object | None = None,
     ) -> None:
         super().__init__(parent)
@@ -117,12 +165,13 @@ class ReportWorker(QThread):
         self._scan = scan
         self._analysis = analysis
         self._formats = formats
+        self._agent = agent
 
     def run(self) -> None:
         """POST the report request and emit the format-to-path mapping."""
         try:
             files = AnalyzerClient(self._analyzer_url).report(
-                self._scan, self._analysis, self._formats
+                self._scan, self._analysis, self._formats, agent=self._agent
             )
         except AnalyzerError as exc:
             self.failed.emit(str(exc))

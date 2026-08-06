@@ -62,183 +62,183 @@ TIER_PROFILES: dict[Tier, TierProfile] = {
 REMEDIATION_LIBRARY: dict[str, dict[Tier, tuple[str, ...]]] = {
     "generic": {
         Tier.daily: (
-            "Patch critical vulnerabilities within 30 days per CIS Controls "
-            "v8 L1; keep the overall risk score below 4.0.",
-            "Maintain a complete asset inventory and remove services that "
-            "lack a documented business need.",
+            ("Patch critical vulnerabilities within 30 days per CIS Controls "
+            "v8 L1; keep the overall risk score below 4.0."),
+            ("Maintain a complete asset inventory and remove services that "
+            "lack a documented business need."),
         ),
         Tier.authority: (
-            "Patch critical vulnerabilities within 7 days per NIST 800-53 "
-            "Moderate and ISO 27001; keep the overall risk score below 2.5.",
-            "Enforce least privilege and firewall segmentation between "
-            "trust zones (internet, dmz, internal, mgmt, airgap).",
+            ("Patch critical vulnerabilities within 7 days per NIST 800-53 "
+            "Moderate and ISO 27001; keep the overall risk score below 2.5."),
+            ("Enforce least privilege and firewall segmentation between "
+            "trust zones (internet, dmz, internal, mgmt, airgap)."),
         ),
         Tier.hacker: (
-            "Patch critical vulnerabilities within 24 hours per NIST 800-53 "
-            "High; keep the overall risk score below 1.5.",
-            "Deploy detections mapped to MITRE ATT&CK for every observed "
-            "technique and run continuous threat hunting.",
+            ("Patch critical vulnerabilities within 24 hours per NIST 800-53 "
+            "High; keep the overall risk score below 1.5."),
+            ("Deploy detections mapped to MITRE ATT&CK for every observed "
+            "technique and run continuous threat hunting."),
         ),
         Tier.military: (
-            "Remediate critical findings immediately; isolate or airgap "
+            ("Remediate critical findings immediately; isolate or airgap "
             "affected systems per NSA/CSS, TEMPEST and CNSS 1253; keep the "
-            "overall risk score below 0.5.",
-            "Enforce zero-trust segmentation with continuous monitoring and "
-            "cross-domain controls on all flows.",
+            "overall risk score below 0.5."),
+            ("Enforce zero-trust segmentation with continuous monitoring and "
+            "cross-domain controls on all flows."),
         ),
     },
     "unauth_service": {
         Tier.daily: (
-            "Enable authentication with strong, unique credentials on all "
+            ("Enable authentication with strong, unique credentials on all "
             "data-store services (Redis, MongoDB, Elasticsearch) within 30 "
-            "days per CIS Controls v8 L1.",
-            "Bind data-store services to localhost or internal interfaces "
-            "only; never expose them on untrusted networks.",
+            "days per CIS Controls v8 L1."),
+            ("Bind data-store services to localhost or internal interfaces "
+            "only; never expose them on untrusted networks."),
         ),
         Tier.authority: (
-            "Close unauthenticated data-store access within 7 days per "
-            "NIST 800-53 Moderate and ISO 27001 access-control requirements.",
-            "Restrict data-store ports with host firewalls and network ACLs "
-            "so only authorized application subnets can connect.",
+            ("Close unauthenticated data-store access within 7 days per "
+            "NIST 800-53 Moderate and ISO 27001 access-control requirements."),
+            ("Restrict data-store ports with host firewalls and network ACLs "
+            "so only authorized application subnets can connect."),
         ),
         Tier.hacker: (
-            "Remediate unauthenticated data stores within 24 hours per "
-            "NIST 800-53 High; assume stored data is already compromised.",
-            "Rotate every credential and key reachable through the "
+            ("Remediate unauthenticated data stores within 24 hours per "
+            "NIST 800-53 High; assume stored data is already compromised."),
+            ("Rotate every credential and key reachable through the "
             "unauthenticated service and audit access logs for MITRE ATT&CK "
-            "T1190 exploitation.",
+            "T1190 exploitation."),
         ),
         Tier.military: (
-            "Disconnect or airgap unauthenticated data stores immediately "
-            "per NSA/CSS and CNSS 1253.",
-            "Acquire forensic images before remediation; treat all stored "
-            "data as compromised by nation-state actors.",
+            ("Disconnect or airgap unauthenticated data stores immediately "
+            "per NSA/CSS and CNSS 1253."),
+            ("Acquire forensic images before remediation; treat all stored "
+            "data as compromised by nation-state actors."),
         ),
     },
     "lateral_movement": {
         Tier.daily: (
-            "Restrict lateral-movement services (SMB 445, RDP 3389, SSH 22, "
+            ("Restrict lateral-movement services (SMB 445, RDP 3389, SSH 22, "
             "WinRM 5985) to management subnets within 30 days per CIS "
-            "Controls v8 L1.",
+            "Controls v8 L1."),
         ),
         Tier.authority: (
-            "Segment lateral-movement ports between trust zones within 7 "
+            ("Segment lateral-movement ports between trust zones within 7 "
             "days per NIST 800-53 Moderate; require jump hosts for admin "
-            "protocols.",
+            "protocols."),
         ),
         Tier.hacker: (
-            "Deploy MITRE ATT&CK T1021 detections for SMB/RDP/SSH/WinRM "
-            "within 24 hours and enforce MFA on all remote access.",
+            ("Deploy MITRE ATT&CK T1021 detections for SMB/RDP/SSH/WinRM "
+            "within 24 hours and enforce MFA on all remote access."),
         ),
         Tier.military: (
-            "Disable or airgap lateral-movement services immediately; "
+            ("Disable or airgap lateral-movement services immediately; "
             "require hardware-backed administrative credentials per NSA/CSS "
-            "guidance.",
+            "guidance."),
         ),
     },
     "default_credentials": {
         Tier.daily: (
-            "Change default credentials on remote-access and database "
+            ("Change default credentials on remote-access and database "
             "services (Telnet, FTP, VNC, MySQL, PostgreSQL, MSSQL, SNMP) "
-            "within 30 days per CIS Controls v8 L1.",
+            "within 30 days per CIS Controls v8 L1."),
         ),
         Tier.authority: (
-            "Enforce unique vaulted credentials and organization password "
-            "policies within 7 days per ISO 27001 and NIST 800-53 Moderate.",
+            ("Enforce unique vaulted credentials and organization password "
+            "policies within 7 days per ISO 27001 and NIST 800-53 Moderate."),
         ),
         Tier.hacker: (
-            "Rotate all potentially exposed credentials within 24 hours and "
-            "deploy MITRE ATT&CK T1078 valid-account detections.",
+            ("Rotate all potentially exposed credentials within 24 hours and "
+            "deploy MITRE ATT&CK T1078 valid-account detections."),
         ),
         Tier.military: (
-            "Replace password authentication with PKI or hardware tokens "
-            "immediately; audit all account usage per CNSS 1253.",
+            ("Replace password authentication with PKI or hardware tokens "
+            "immediately; audit all account usage per CNSS 1253."),
         ),
     },
     "exposed_admin_panel": {
         Tier.daily: (
-            "Remove administrative web panels from general network reach "
-            "(VPN-gate or allow-list) within 30 days per CIS Controls v8 L1.",
+            ("Remove administrative web panels from general network reach "
+            "(VPN-gate or allow-list) within 30 days per CIS Controls v8 L1."),
         ),
         Tier.authority: (
-            "Restrict admin panels to allow-listed management networks "
-            "within 7 days per NIST 800-53 Moderate.",
+            ("Restrict admin panels to allow-listed management networks "
+            "within 7 days per NIST 800-53 Moderate."),
         ),
         Tier.hacker: (
-            "Take exposed admin panels offline within 24 hours; review "
+            ("Take exposed admin panels offline within 24 hours; review "
             "panel access logs for unauthorized use mapped to MITRE ATT&CK "
-            "T1190.",
+            "T1190."),
         ),
         Tier.military: (
-            "Airgap administrative interfaces immediately; permit access "
-            "only from hardened privileged-access workstations per NSA/CSS.",
+            ("Airgap administrative interfaces immediately; permit access "
+            "only from hardened privileged-access workstations per NSA/CSS."),
         ),
     },
     "unpatched_rce": {
         Tier.daily: (
-            "Patch remote-code-execution vulnerabilities (CVSS >= 7.0) "
-            "within 30 days per CIS Controls v8 L1.",
+            ("Patch remote-code-execution vulnerabilities (CVSS >= 7.0) "
+            "within 30 days per CIS Controls v8 L1."),
         ),
         Tier.authority: (
-            "Patch critical RCE vulnerabilities within 7 days per NIST "
+            ("Patch critical RCE vulnerabilities within 7 days per NIST "
             "800-53 Moderate and ISO 27001; apply WAF virtual patching "
-            "until fixes are deployed.",
+            "until fixes are deployed."),
         ),
         Tier.hacker: (
-            "Patch or isolate RCE-affected services within 24 hours per "
+            ("Patch or isolate RCE-affected services within 24 hours per "
             "NIST 800-53 High; hunt for exploitation using the mapped MITRE "
-            "ATT&CK techniques.",
+            "ATT&CK techniques."),
         ),
         Tier.military: (
-            "Isolate or airgap RCE-affected systems immediately; rebuild "
-            "from known-good media per NSA/CSS and CNSS 1253.",
+            ("Isolate or airgap RCE-affected systems immediately; rebuild "
+            "from known-good media per NSA/CSS and CNSS 1253."),
         ),
     },
     "internet_exposure": {
         Tier.daily: (
-            "Minimize internet-exposed services within 30 days and document "
-            "business justification for each per CIS Controls v8 L1.",
+            ("Minimize internet-exposed services within 30 days and document "
+            "business justification for each per CIS Controls v8 L1."),
         ),
         Tier.authority: (
-            "Move internet-facing services into a firewalled DMZ within 7 "
-            "days per NIST 800-53 Moderate.",
+            ("Move internet-facing services into a firewalled DMZ within 7 "
+            "days per NIST 800-53 Moderate."),
         ),
         Tier.hacker: (
-            "Reduce the internet attack surface within 24 hours; front "
+            ("Reduce the internet attack surface within 24 hours; front "
             "exposed services with WAF/IPS and MITRE ATT&CK-based "
-            "monitoring.",
+            "monitoring."),
         ),
         Tier.military: (
-            "Remove all non-essential internet exposure immediately; "
+            ("Remove all non-essential internet exposure immediately; "
             "enforce physical segmentation or airgaps per TEMPEST and "
-            "NSA/CSS guidance.",
+            "NSA/CSS guidance."),
         ),
     },
     "posture_exposure": {
         Tier.daily: (
-            "Require authentication on every web/IPP admin interface and "
+            ("Require authentication on every web/IPP admin interface and "
             "disable legacy cleartext services (LPD 515, raw printing 9100, "
-            "telnet) within 30 days per CIS Controls v8 L1.",
-            "Restrict router/gateway administration to a dedicated "
-            "management VLAN; never expose admin panels to the general LAN.",
+            "telnet) within 30 days per CIS Controls v8 L1."),
+            ("Restrict router/gateway administration to a dedicated "
+            "management VLAN; never expose admin panels to the general LAN."),
         ),
         Tier.authority: (
-            "Close unauthenticated interfaces and replace cleartext "
+            ("Close unauthenticated interfaces and replace cleartext "
             "protocols with SSH/IPPS within 7 days per NIST 800-53 Moderate "
-            "and ISO 27001.",
-            "Firewall printer and management services (515, 631, 9100) to "
-            "authorized admin subnets only.",
+            "and ISO 27001."),
+            ("Firewall printer and management services (515, 631, 9100) to "
+            "authorized admin subnets only."),
         ),
         Tier.hacker: (
-            "Remediate unauthenticated admin interfaces within 24 hours per "
+            ("Remediate unauthenticated admin interfaces within 24 hours per "
             "NIST 800-53 High; rotate any credentials reachable through "
             "them and audit access logs for MITRE ATT&CK T1190/T1040 "
-            "activity.",
+            "activity."),
         ),
         Tier.military: (
-            "Disconnect unauthenticated and legacy cleartext services "
+            ("Disconnect unauthenticated and legacy cleartext services "
             "immediately; permit administration only from hardened "
-            "privileged-access workstations per NSA/CSS and CNSS 1253.",
+            "privileged-access workstations per NSA/CSS and CNSS 1253."),
         ),
     },
 }

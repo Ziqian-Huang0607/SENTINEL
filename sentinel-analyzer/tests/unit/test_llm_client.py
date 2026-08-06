@@ -7,7 +7,6 @@ import json
 import httpx
 import pytest
 import respx
-
 from src.llm_client import (
     GENERATE_OPTIONS,
     LLM_SEED,

@@ -21,7 +21,7 @@ except ImportError:
 
 requires_pyside = pytest.mark.skipif(not HAS_PYSIDE, reason="PySide6 not available")
 
-from sentinel_ui.models import AnalysisOutput, ScanInput, Tier
+from sentinel_ui.models import AgentReport, AnalysisOutput, ScanInput, Tier
 from sentinel_ui.validators import validate_confirm, validate_target
 
 SPEC_SCAN = {
@@ -85,6 +85,68 @@ SPEC_ANALYSIS = {
     "analyzer_mode": "fallback",
 }
 
+SPEC_AGENT = {
+    "agent_version": "0.1.0",
+    "scan_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "target": "192.168.1.0/24",
+    "tier": "daily",
+    "started_at": "2025-01-01T10:01:00Z",
+    "finished_at": "2025-01-01T10:02:30Z",
+    "model": "ollama:llama3.1:8b",
+    "investigations": [
+        {
+            "host": "192.168.1.1",
+            "ports": [80],
+            "trigger": "gateway",
+            "status": "concluded",
+            "turns": 4,
+            "summary": "Router admin interface answered with a TP-Link login page.",
+            "findings": [],
+            "transcript_path": "/tmp/agent_transcripts/192.168.1.1_80.json",
+        }
+    ],
+    "findings": [
+        {
+            "id": "AGENT-DEFAULT-PANEL-1",
+            "finding_class": "DEFAULT-PANEL",
+            "host": "192.168.1.1",
+            "port": 80,
+            "severity": 7.0,
+            "title": "Default administrative panel exposed",
+            "detail": "TP-Link login page answered GET / with 200.",
+            "evidence": [
+                {
+                    "id": "E1",
+                    "tool": "http_get",
+                    "args": {"port": 80},
+                    "excerpt": "...",
+                    "ts": "2025-01-01T10:01:10Z",
+                },
+                {
+                    "id": "E3",
+                    "tool": "default_panel_check",
+                    "args": {},
+                    "excerpt": "...",
+                    "ts": "2025-01-01T10:01:40Z",
+                },
+            ],
+            "confidence": 0.9,
+        }
+    ],
+    "drift": [
+        {
+            "kind": "NEW_PORT",
+            "host": "192.168.1.45",
+            "port": 6379,
+            "before": "",
+            "after": "open/redis",
+            "ts": "2025-01-01T10:02:00Z",
+        }
+    ],
+    "risk_score": 4.9,
+    "observations": ["Ollama unavailable; deterministic playbook ran."],
+}
+
 
 # ---------- Pure validation logic (no Qt required) ----------
 
@@ -135,6 +197,88 @@ def test_models_accept_spec_contract() -> None:
     assert analysis.remediation.for_tier(Tier.HACKER) == ["Enable TLS and rotate credentials."]
 
 
+def test_agent_models_accept_spec_contract() -> None:
+    """The agent models round-trip an agent_report.json document."""
+    agent = AgentReport.model_validate(SPEC_AGENT)
+    assert agent.model == "ollama:llama3.1:8b"
+    finding = agent.findings[0]
+    assert finding.finding_class == "DEFAULT-PANEL"
+    assert finding.endpoint() == "192.168.1.1:80"
+    assert finding.evidence_ids() == "E1, E3"
+    assert agent.drift[0].endpoint() == "192.168.1.45:6379"
+
+
+def test_build_agent_command_uses_scan_file() -> None:
+    """The agent invocation reuses the GUI's scan.json and runs gated (--yes)."""
+    from pathlib import Path
+
+    from sentinel_ui.api import build_agent_command
+
+    command = build_agent_command(
+        Path("/repo/sentinel-agent"),
+        "192.168.1.0/24",
+        Tier.DAILY,
+        Path("/work/scan.json"),
+        Path("/work/agent_report.json"),
+        Path("/work/agent_transcripts"),
+        scanner_binary="/bin/sentinel-scanner",
+        python_exe="/usr/bin/python3",
+    )
+    assert command[:3] == ["/usr/bin/python3", "-m", "src"]
+    assert "--scan-file" in command
+    assert command[command.index("--scan-file") + 1] == "/work/scan.json"
+    assert "--yes" in command
+    assert "--scanner" in command
+
+
+def test_report_request_includes_agent_document() -> None:
+    """AnalyzerClient.report forwards the agent doc verbatim when present."""
+    import httpx
+    import respx
+
+    from sentinel_ui.api import AnalyzerClient
+
+    scan = ScanInput.model_validate(SPEC_SCAN)
+    analysis = AnalysisOutput.model_validate(SPEC_ANALYSIS)
+    agent = AgentReport.model_validate(SPEC_AGENT)
+
+    with respx.mock(base_url="http://analyzer.test") as router:
+        route = router.post("/report").mock(
+            return_value=httpx.Response(200, json={"files": {"json": "/out/r.json"}})
+        )
+        files = AnalyzerClient("http://analyzer.test").report(
+            scan, analysis, ["json"], agent=agent
+        )
+
+    assert files == {"json": "/out/r.json"}
+    import json as _json
+
+    forwarded = _json.loads(route.calls[0].request.content)
+    assert forwarded["agent"]["scan_id"] == agent.scan_id
+    assert forwarded["agent"]["findings"][0]["id"] == "AGENT-DEFAULT-PANEL-1"
+
+
+def test_report_request_omits_agent_when_absent() -> None:
+    """Without an agent report the /report body has no agent key at all."""
+    import httpx
+    import respx
+
+    from sentinel_ui.api import AnalyzerClient
+
+    scan = ScanInput.model_validate(SPEC_SCAN)
+    analysis = AnalysisOutput.model_validate(SPEC_ANALYSIS)
+
+    with respx.mock(base_url="http://analyzer.test") as router:
+        route = router.post("/report").mock(
+            return_value=httpx.Response(200, json={"files": {}})
+        )
+        AnalyzerClient("http://analyzer.test").report(scan, analysis, ["json"])
+
+    import json as _json
+
+    assert "agent" not in _json.loads(route.calls[0].request.content)
+
+
 # ---------- Qt smoke tests (skipped without PySide6) ----------
 
 
@@ -157,26 +301,59 @@ def test_application_instantiates(qapp) -> None:
 
 @requires_pyside
 def test_main_window_shows(qapp) -> None:
-    """The main window shows with sidebar navigation and four pages."""
-    from sentinel_ui.main_window import MainWindow
+    """The main window shows with sidebar navigation and five pages."""
+    from sentinel_ui.main_window import NAV_ITEMS, MainWindow
 
     window = MainWindow()
     window.show()
     assert window.isVisible()
     assert window.windowTitle() == "SENTINEL"
+    assert NAV_ITEMS == ("Dashboard", "New Scan", "Results", "Agent", "Reports")
+    assert window._pages.count() == 5
     window.close()
 
 
 @requires_pyside
 def test_all_views_construct(qapp) -> None:
     """Every view widget constructs and exposes its empty state."""
+    from sentinel_ui.views.agent import AgentView
     from sentinel_ui.views.dashboard import DashboardView
     from sentinel_ui.views.new_scan import NewScanView
     from sentinel_ui.views.reports import ReportsView
     from sentinel_ui.views.results import ResultsView
 
-    for view in (DashboardView(), NewScanView(), ResultsView(), ReportsView()):
+    for view in (DashboardView(), NewScanView(), ResultsView(), AgentView(), ReportsView()):
         assert view is not None
+
+
+@requires_pyside
+def test_agent_view_populates(qapp) -> None:
+    """The Agent view renders findings, investigations and drift from a report."""
+    from sentinel_ui.views.agent import AgentView
+
+    view = AgentView()
+    view.set_data(AgentReport.model_validate(SPEC_AGENT))
+    assert view._stack.currentIndex() == 1
+    assert view._findings_table.rowCount() == 1
+    assert view._investigations_table.rowCount() == 1
+    assert view._drift_table.rowCount() == 1
+    assert "DEFAULT-PANEL" in view._stats_label.text()
+    assert view._observations_list.count() == 1
+    view.set_data(None)
+    assert view._stack.currentIndex() == 0
+
+
+@requires_pyside
+def test_new_scan_has_agent_checkbox(qapp) -> None:
+    """The New Scan form offers the agent investigation toggle (default on)."""
+    from PySide6.QtCore import QSettings
+
+    from sentinel_ui.views.new_scan import NewScanView
+
+    QSettings().remove("agent/enabled")  # isolate from persisted operator choice
+    view = NewScanView()
+    assert view._agent_check is not None
+    assert view._agent_check.isChecked()
 
 
 @requires_pyside

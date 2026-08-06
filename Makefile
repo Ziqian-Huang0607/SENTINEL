@@ -32,6 +32,7 @@ CLI_BIN     := $(ROOT)/bin/sentinel-cli
 ANALYZER_PY = $(shell [ -x "$(ROOT)/sentinel-analyzer/.venv/bin/python" ] && echo "$(ROOT)/sentinel-analyzer/.venv/bin/python" || echo python3)
 REPORTS_PY  = $(shell [ -x "$(ROOT)/sentinel-reports/.venv/bin/python" ] && echo "$(ROOT)/sentinel-reports/.venv/bin/python" || echo python3)
 UI_PY       = $(shell [ -x "$(ROOT)/sentinel-ui/.venv/bin/python" ] && echo "$(ROOT)/sentinel-ui/.venv/bin/python" || echo python3)
+AGENT_PY    = $(shell [ -x "$(ROOT)/sentinel-agent/.venv/bin/python" ] && echo "$(ROOT)/sentinel-agent/.venv/bin/python" || echo python3)
 
 # Python used for the repo-level test harness (needs pytest/httpx/pydantic —
 # all present in the analyzer venv; `make test-integration` ensures them).
@@ -40,8 +41,9 @@ TEST_PY = $(ANALYZER_PY)
 # ruff runs via the analyzer venv python (installed by requirements-test.txt).
 
 .PHONY: build build-scanner build-cli build-python up down test test-unit test-ui \
-        test-integration test-e2e test-llm-memory test-build lint fmt ui clean \
-        venv-analyzer build-venv-analyzer venv-reports build-venv-reports venv-ui build-venv-ui
+        test-integration test-e2e test-llm-memory test-build lint fmt ui clean agent \
+        venv-analyzer build-venv-analyzer venv-reports build-venv-reports venv-ui build-venv-ui \
+        venv-agent build-venv-agent
 
 ## build: compile scanner + cli and create python venvs for the services/UI
 build: build-scanner build-cli build-python
@@ -53,7 +55,7 @@ build-cli:
 	mkdir -p bin
 	cd sentinel-cli && $(GO) build -o "$(CLI_BIN)" .
 
-build-python: build-venv-analyzer build-venv-reports build-venv-ui
+build-python: build-venv-analyzer build-venv-reports build-venv-ui build-venv-agent
 
 # Venv creation and pip installs live in separate targets because GNU make
 # expands a target's whole recipe before running its first line — the python
@@ -84,6 +86,14 @@ build-venv-ui: venv-ui
 	"$(UI_PY)" -m pip install -r sentinel-ui/requirements.txt
 	"$(UI_PY)" -m pip install -r requirements-test.txt
 
+venv-agent:
+	python3 -m venv sentinel-agent/.venv
+
+build-venv-agent: venv-agent
+	"$(AGENT_PY)" -m pip install --upgrade pip
+	"$(AGENT_PY)" -m pip install -r sentinel-agent/requirements.txt
+	"$(AGENT_PY)" -m pip install -r requirements-test.txt
+
 ## up: start analyzer + reports (+ ollama when using: make up PROFILES=--profile llm)
 up:
 	./scripts/services.sh start
@@ -99,6 +109,7 @@ test-unit:
 	cd sentinel-analyzer && "$(ANALYZER_PY)" -m pytest -q
 	cd sentinel-cli && $(GO) test ./...
 	cd sentinel-reports && "$(REPORTS_PY)" -m pytest -q
+	cd sentinel-agent && "$(AGENT_PY)" -m pytest -q
 	"$(TEST_PY)" -m pytest test/unit -q
 
 ## test-ui: offscreen Qt smoke/unit tests for the desktop GUI
@@ -134,7 +145,7 @@ test-build:
 
 lint:
 	cd sentinel-scanner && $(CARGO) clippy --all-targets -- -D warnings
-	"$(ANALYZER_PY)" -m ruff check sentinel-analyzer sentinel-reports sentinel-ui test
+	"$(ANALYZER_PY)" -m ruff check sentinel-analyzer sentinel-reports sentinel-ui sentinel-agent test
 	cd sentinel-cli && $(GO) vet ./...
 	@cd sentinel-cli && files=$$($(GOFMT) -l .); \
 		if [ -n "$$files" ]; then echo "gofmt needed on: $$files"; exit 1; fi
@@ -147,6 +158,13 @@ fmt:
 
 ui:
 	cd sentinel-ui && "$(UI_PY)" -m sentinel_ui
+
+## agent: AI-driven network investigation (CONFIRM gate is interactive)
+##   make agent TARGET=192.168.1.0/24 TIER=hacker
+TARGET ?= 127.0.0.1/32
+TIER   ?= daily
+agent: build-scanner
+	cd sentinel-agent && "$(AGENT_PY)" -m src --target "$(TARGET)" --tier "$(TIER)"
 
 clean:
 	-cd sentinel-scanner && $(CARGO) clean

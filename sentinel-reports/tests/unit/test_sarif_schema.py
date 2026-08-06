@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 import jsonschema
-
 from src.formatters.sarif_formatter import build_sarif, level_for_cvss
 from src.generator import AnalysisOutput, ScanInput
 

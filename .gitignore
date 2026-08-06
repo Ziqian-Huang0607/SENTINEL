@@ -21,6 +21,8 @@ dist/
 scan.json
 analysis.json
 sentinel-report.*
+agent_report.json
+agent_transcripts/
 
 # Operator binary produced by `make build`
 bin/

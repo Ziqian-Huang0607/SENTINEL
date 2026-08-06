@@ -1,0 +1,18 @@
+{
+  "scan_id": "7db82e4b-11b3-4e4b-b994-e7cd59fde3ab",
+  "model": "llama3.1:8b",
+  "options": {
+    "num_ctx": 8192,
+    "num_gpu": 1,
+    "num_thread": 4,
+    "temperature": 0.1,
+    "top_p": 0.9,
+    "top_k": 40,
+    "num_predict": 2048,
+    "seed": 0
+  },
+  "raw_text": "{\n  \"reasoning\": \"No vulnerabilities or posture findings detected in the scan.\",\n  \"attack_chains\": [],\n  \"remediation\": {\n    \"daily\": [\"Configure firewalls to restrict incoming traffic\"],\n    \"authority\": [\"Review and update network policies to ensure proper access controls\"],\n    \"hacker\": [\"Rotate default credentials for all systems\"],\n    \"military\": [\"Patch all systems with available security updates\"]\n  },\n  \"risk_score\": 0.0,\n  \"observations\": [],\n  \"analyzer_mode\": \"llm\"\n}",
+  "ok": true,
+  "error": null,
+  "ts": 1786027754
+}

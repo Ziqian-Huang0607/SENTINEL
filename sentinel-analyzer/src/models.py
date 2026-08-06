@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -252,6 +253,9 @@ class ReportRequest(BaseModel):
     scan: ScanInput
     analysis: AnalysisOutput
     formats: list[ReportFormat]
+    # R9: optional agent document from sentinel-agent; forwarded verbatim to
+    # the reports service, which renders the Agent Investigation section.
+    agent: dict[str, Any] | None = None
 
 
 class ReportResponse(BaseModel):

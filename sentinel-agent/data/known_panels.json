@@ -1,0 +1,71 @@
+{
+  "version": "2026.08.1",
+  "panels": [
+    {
+      "name": "tp-link-router",
+      "vendor": "TP-Link",
+      "server_patterns": ["tp-link", "tplink"],
+      "title_patterns": ["tp-link", "tplink"]
+    },
+    {
+      "name": "asus-router",
+      "vendor": "ASUS",
+      "server_patterns": ["asus", "asuswrt"],
+      "title_patterns": ["asus", "asuswrt", "asusrouter"]
+    },
+    {
+      "name": "netgear-router",
+      "vendor": "Netgear",
+      "server_patterns": ["netgear"],
+      "title_patterns": ["netgear"]
+    },
+    {
+      "name": "linksys-router",
+      "vendor": "Linksys",
+      "server_patterns": ["linksys"],
+      "title_patterns": ["linksys"]
+    },
+    {
+      "name": "ubiquiti-unifi",
+      "vendor": "Ubiquiti",
+      "server_patterns": ["unifi", "ubnt"],
+      "title_patterns": ["unifi", "ubnt", "ubiquiti"]
+    },
+    {
+      "name": "ubiquiti-edgeos",
+      "vendor": "Ubiquiti",
+      "server_patterns": ["edgeos"],
+      "title_patterns": ["edgeos", "edgerouter", "edgemax"]
+    },
+    {
+      "name": "d-link-router",
+      "vendor": "D-Link",
+      "server_patterns": ["d-link", "dlink"],
+      "title_patterns": ["d-link", "dlink"]
+    },
+    {
+      "name": "openwrt-luci",
+      "vendor": "OpenWrt",
+      "server_patterns": ["uhttpd", "luci"],
+      "title_patterns": ["luci", "openwrt"]
+    },
+    {
+      "name": "mikrotik-routeros",
+      "vendor": "MikroTik",
+      "server_patterns": ["routeros", "mikrotik"],
+      "title_patterns": ["routeros", "mikrotik"]
+    },
+    {
+      "name": "generic-router-admin",
+      "vendor": "generic",
+      "server_patterns": ["router"],
+      "title_patterns": [
+        "router admin",
+        "router login",
+        "wireless router",
+        "admin panel",
+        "router configuration"
+      ]
+    }
+  ]
+}

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
-
 from src.models import (
     EPSS_VERSION,
     KEV_RISK_FLOOR,

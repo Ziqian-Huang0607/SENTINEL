@@ -33,6 +33,9 @@ class ReportRequest(BaseModel):
     formats: list[Literal["pdf", "json", "sarif"]] = Field(
         default_factory=lambda: ["pdf", "json", "sarif"], min_length=1
     )
+    # Optional agent_report.json document; renders an Agent Investigation
+    # section when present.
+    agent: dict[str, Any] | None = None
 
 
 class ReportResponse(BaseModel):
@@ -51,7 +54,13 @@ def health() -> dict[str, str]:
 def report(request: ReportRequest) -> ReportResponse:
     """Generate the requested report formats for a scan + analysis pair."""
     try:
-        files = generate(request.scan, request.analysis, list(request.formats), REPORTS_DIR)
+        files = generate(
+            request.scan,
+            request.analysis,
+            list(request.formats),
+            REPORTS_DIR,
+            agent=request.agent,
+        )
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors()) from exc
     except ValueError as exc:

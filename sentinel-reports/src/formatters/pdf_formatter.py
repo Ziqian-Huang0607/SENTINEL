@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from src.generator import AnalysisOutput, ScanInput
+from src.generator import AgentReport, AnalysisOutput, ScanInput
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ try:  # Primary engine (kept in requirements.txt).
     import weasyprint as _weasyprint
 
     _WEASY_IMPORT_ERROR: BaseException | None = None
-except Exception as exc:  # ImportError / OSError when system libs are missing.
+except Exception as exc:  # noqa: BLE001 — ImportError/OSError when system libs are missing.
     _weasyprint = None  # type: ignore[assignment]
     _WEASY_IMPORT_ERROR = exc
     logger.warning("WeasyPrint unavailable (%s); PDF engine falls back to fpdf2.", exc)
@@ -124,7 +124,7 @@ def open_port_count(scan: ScanInput) -> int:
     return sum(1 for host in scan.hosts for port in host.ports if port.state == "open")
 
 
-def render_html(scan: ScanInput, analysis: AnalysisOutput) -> str:
+def render_html(scan: ScanInput, analysis: AnalysisOutput, agent: AgentReport | None = None) -> str:
     """Render the branded report HTML from the Jinja2 templates."""
     from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -136,6 +136,7 @@ def render_html(scan: ScanInput, analysis: AnalysisOutput) -> str:
     return template.render(
         scan=scan,
         analysis=analysis,
+        agent=agent,
         tiers=list(TIER_META.items()),
         open_port_count=open_port_count(scan),
         generated_at=fmt_dt(datetime.now().astimezone()),
@@ -146,7 +147,12 @@ def render_html(scan: ScanInput, analysis: AnalysisOutput) -> str:
     )
 
 
-def render_pdf(scan: ScanInput, analysis: AnalysisOutput, out_path: str) -> str:
+def render_pdf(
+    scan: ScanInput,
+    analysis: AnalysisOutput,
+    out_path: str,
+    agent: AgentReport | None = None,
+) -> str:
     """Render the PDF report to ``out_path`` and return the path.
 
     Uses WeasyPrint when importable; otherwise the pure-Python fpdf2
@@ -154,16 +160,18 @@ def render_pdf(scan: ScanInput, analysis: AnalysisOutput, out_path: str) -> str:
     """
     if _weasyprint is not None:
         try:
-            return _render_pdf_weasy(scan, analysis, out_path)
+            return _render_pdf_weasy(scan, analysis, out_path, agent=agent)
         except Exception:
             logger.exception("WeasyPrint render failed; falling back to fpdf2.")
-    return _render_pdf_fpdf(scan, analysis, out_path)
+    return _render_pdf_fpdf(scan, analysis, out_path, agent=agent)
 
 
-def _render_pdf_weasy(scan: ScanInput, analysis: AnalysisOutput, out_path: str) -> str:
+def _render_pdf_weasy(
+    scan: ScanInput, analysis: AnalysisOutput, out_path: str, agent: AgentReport | None = None
+) -> str:
     """WeasyPrint path: full branded HTML/CSS rendering."""
-    assert _weasyprint is not None  # noqa: S101 - guarded by render_pdf
-    html = render_html(scan, analysis)
+    assert _weasyprint is not None
+    html = render_html(scan, analysis, agent=agent)
     _weasyprint.HTML(string=html, base_url=str(TEMPLATES_DIR) + "/").write_pdf(out_path)
     return out_path
 
@@ -205,7 +213,12 @@ def _wrap(pdf: Any, text: Any, width: float) -> list[str]:
     return lines or [""]
 
 
-def _render_pdf_fpdf(scan: ScanInput, analysis: AnalysisOutput, out_path: str) -> str:
+def _render_pdf_fpdf(
+    scan: ScanInput,
+    analysis: AnalysisOutput,
+    out_path: str,
+    agent: AgentReport | None = None,
+) -> str:
     """fpdf2 path: programmatic dark-steel report (no system libs needed)."""
     from fpdf import FPDF
 
@@ -483,6 +496,77 @@ def _render_pdf_fpdf(scan: ScanInput, analysis: AnalysisOutput, out_path: str) -
         pdf.set_font("helvetica", "I", 9)
         pdf.set_text_color(*_MUTED)
         pdf.multi_cell(0, 5, _latin("No exposure findings without a CVE match were observed."))
+
+    # ---------------- agent investigation ----------------
+    if agent is not None:
+        section("Agent Investigation")
+        pdf.set_font("helvetica", "I", 8.5)
+        pdf.set_text_color(*_MUTED)
+        pdf.multi_cell(
+            0,
+            4.6,
+            _latin(
+                f"Autonomous investigation (model: {agent.model}). Every finding cites "
+                "probe evidence from the investigation transcript; severities are fixed "
+                "per finding class and scored with EPSS = 0."
+            ),
+        )
+        pdf.ln(1.5)
+        if agent.findings:
+            agent_rows = [
+                [
+                    f.id,
+                    f.finding_class,
+                    f"{f.severity:.1f}",
+                    f"{f.host}:{f.port}",
+                    f.title or "-",
+                    ", ".join(f.evidence) if f.evidence else "-",
+                ]
+                for f in sorted(agent.findings, key=lambda f: f.severity, reverse=True)
+            ]
+            table(
+                ["Finding", "Class", "Sev", "Endpoint", "Title", "Evidence"],
+                agent_rows,
+                [30.0, 26.0, 11.0, 28.0, 63.0, 20.0],
+            )
+        else:
+            pdf.set_font("helvetica", "I", 9)
+            pdf.set_text_color(*_MUTED)
+            pdf.multi_cell(0, 5, _latin("The agent produced no findings."))
+
+        if agent.investigations:
+            pdf.ln(1.5)
+            inv_rows = [
+                [
+                    f"{inv.host}:{','.join(str(p) for p in inv.ports)}",
+                    inv.trigger,
+                    inv.status,
+                    str(inv.turns),
+                    inv.summary or "-",
+                ]
+                for inv in agent.investigations
+            ]
+            table(
+                ["Target", "Trigger", "Status", "Turns", "Summary"],
+                inv_rows,
+                [34.0, 24.0, 26.0, 12.0, 82.0],
+            )
+
+        if agent.drift:
+            pdf.ln(1.5)
+            pdf.set_font("helvetica", "B", 10)
+            pdf.set_text_color(*_STEEL_900)
+            pdf.cell(0, 6, _latin("Network drift since previous scan"), new_x="LMARGIN", new_y="NEXT")
+            drift_rows = [
+                [
+                    d.kind,
+                    f"{d.host}:{d.port}" if d.port is not None else d.host,
+                    d.before or "-",
+                    d.after or "-",
+                ]
+                for d in agent.drift
+            ]
+            table(["Change", "Endpoint", "Before", "After"], drift_rows, [34.0, 44.0, 50.0, 50.0])
 
     # ---------------- attack chains ----------------
     section("Attack Chains")
